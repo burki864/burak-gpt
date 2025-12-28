@@ -1,128 +1,101 @@
-import streamlit as st
-from openai import OpenAI
-from gradio_client import Client
-import time
+import gradio as gr
+import torch
+from diffusers import StableDiffusionPipeline
+from PIL import Image
+import io
+import base64
 
-# ---------------- CONFIG ----------------
-st.set_page_config(
-    page_title="Burak GPT",
-    page_icon="🧠",
-    layout="wide"
+# ========== MODEL ==========
+MODEL_ID = "runwayml/stable-diffusion-v1-5"
+
+pipe = StableDiffusionPipeline.from_pretrained(
+    MODEL_ID,
+    torch_dtype=torch.float32
 )
+pipe = pipe.to("cpu")
 
-# ---------------- SECRETS ----------------
-OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
-HF_SPACE_URL = st.secrets["HF_SPACE_URL"]
+# ========== MEMORY ==========
+chat_memory = []
 
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
-hf_client = Client(HF_SPACE_URL)
+def chat_response(message, mode):
+    global chat_memory
 
-# ---------------- SESSION ----------------
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+    if mode == "Yazı":
+        reply = f"🧠 **Burak GPT:** {message} üzerine düşünüyorum...\n\nBu konuda detaylı bir cevap hazırlayabilirim."
+        chat_memory.append((message, reply))
+        return chat_memory, None
 
-# ---------------- STYLE ----------------
-st.markdown("""
-<style>
+    elif mode == "Görsel":
+        image = pipe(
+            prompt=message,
+            num_inference_steps=20,
+            guidance_scale=7.5
+        ).images[0]
+
+        buffered = io.BytesIO()
+        image.save(buffered, format="PNG")
+        img_base64 = base64.b64encode(buffered.getvalue()).decode()
+
+        reply = f"🎨 **Burak GPT çiziyor:** `{message}`"
+        chat_memory.append((message, reply))
+
+        return chat_memory, f"data:image/png;base64,{img_base64}"
+
+# ========== TASARIM ==========
+css = """
 body {
-    background-color: #0f172a;
+    background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
 }
-.chat-user {
-    background:#2563eb;
-    color:white;
-    padding:12px;
-    border-radius:12px;
-    margin:8px 0;
-    width:fit-content;
+.gradio-container {
+    max-width: 1000px !important;
 }
-.chat-bot {
-    background:#1e293b;
-    color:white;
-    padding:12px;
-    border-radius:12px;
-    margin:8px 0;
-    width:fit-content;
+#chatbox {
+    height: 420px;
+    overflow-y: auto;
 }
-.image-box {
-    background:#111827;
-    border-radius:16px;
-    padding:20px;
-    text-align:center;
-}
-</style>
-""", unsafe_allow_html=True)
+"""
 
-# ---------------- HEADER ----------------
-st.title("🧠 Burak GPT")
-st.caption("Yazı • Araştırma • Görsel")
-
-# ---------------- INPUT BAR ----------------
-col1, col2, col3 = st.columns([2, 8, 1])
-
-with col1:
-    mode = st.selectbox(
-        "",
-        ["Yazı", "Araştırma", "Görsel"],
-        label_visibility="collapsed"
+# ========== UI ==========
+with gr.Blocks(css=css, theme=gr.themes.Soft()) as demo:
+    gr.Markdown(
+        """
+        # 🧠 Burak GPT
+        **Yazı • Araştırma • Görsel üretimi**  
+        Profesyonel yapay zeka arayüzü
+        """
     )
 
-with col2:
-    user_input = st.text_input(
-        "",
-        placeholder="Bir şey yaz..."
+    with gr.Row():
+        with gr.Column(scale=1):
+            mode = gr.Radio(
+                ["Yazı", "Görsel"],
+                value="Yazı",
+                label="🛠️ Mod"
+            )
+
+        with gr.Column(scale=4):
+            chatbot = gr.Chatbot(
+                elem_id="chatbox",
+                label="💬 Sohbet"
+            )
+
+    with gr.Row():
+        user_input = gr.Textbox(
+            placeholder="Mesajını yaz...",
+            show_label=False,
+            scale=4
+        )
+        send_btn = gr.Button("➤", scale=1)
+
+    image_output = gr.Image(
+        label="🖼️ Üretilen Görsel",
+        visible=True
     )
 
-with col3:
-    send = st.button("▶")
-
-# ---------------- FUNCTIONS ----------------
-def burak_gpt_text(prompt, mode):
-    system_prompt = {
-        "Yazı": "Samimi, net ve akıllı cevap ver.",
-        "Araştırma": "Maddeli, öğretici ve detaylı anlat."
-    }.get(mode, "")
-
-    response = openai_client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt}
-        ]
+    send_btn.click(
+        fn=chat_response,
+        inputs=[user_input, mode],
+        outputs=[chatbot, image_output]
     )
 
-    return response.choices[0].message.content
-
-def burak_gpt_image(prompt):
-    result = hf_client.predict(
-        prompt=prompt,
-        api_name="/generate"
-    )
-    return result["url"]
-
-# ---------------- SEND ----------------
-if send and user_input:
-    st.session_state.messages.append(("user", user_input, mode))
-
-    if mode == "Görsel":
-        with st.spinner("🎨 Burak GPT çiziyor..."):
-            img_url = burak_gpt_image(user_input)
-            st.session_state.messages.append(("image", img_url, mode))
-    else:
-        with st.spinner("🧠 Burak GPT düşünüyor..."):
-            reply = burak_gpt_text(user_input, mode)
-            st.session_state.messages.append(("bot", reply, mode))
-
-# ---------------- CHAT AREA ----------------
-st.divider()
-
-for role, content, mode in st.session_state.messages:
-    if role == "user":
-        st.markdown(f"<div class='chat-user'>🧑 {content}</div>", unsafe_allow_html=True)
-
-    elif role == "bot":
-        st.markdown(f"<div class='chat-bot'>🤖 {content}</div>", unsafe_allow_html=True)
-
-    elif role == "image":
-        st.markdown("<div class='image-box'>", unsafe_allow_html=True)
-        st.image(content, width=512)
-        st.markdown("</div>", unsafe_allow_html=True)
+demo.launch()
