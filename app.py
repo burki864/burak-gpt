@@ -80,28 +80,36 @@ if send and user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
 
     # -------- GÖRSEL MODU --------
-    if mode == "Görsel":
-        with st.container():
-            box = st.empty()
-            box.markdown('<div class="image-box">🎨 Burak GPT çiziyor…</div>', unsafe_allow_html=True)
+ if mode == "Görsel":
+    box = st.empty()
+    box.markdown(
+        '<div class="image-box">🎨 Burak GPT çiziyor…</div>',
+        unsafe_allow_html=True
+    )
 
-            img = client.images.generate(
-                model="gpt-image-1",
-                prompt=user_input,
-                size="1024x1024"
-            )
+    result = client.responses.create(
+        model="gpt-4.1-mini",
+        input=[{
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": user_input},
+                {"type": "input_image_generation"}
+            ]
+        }]
+    )
 
-            image_base64 = img.data[0].b64_json
-            image_bytes = base64.b64decode(image_base64)
+    image_base64 = result.output[0].content[0].image_base64
+    image_bytes = base64.b64decode(image_base64)
 
-            box.image(image_bytes, width=320)
+    box.image(image_bytes, width=320)
 
-            st.download_button(
-                "⬇️ Görseli indir",
-                image_bytes,
-                file_name="burakgpt.png",
-                mime="image/png"
-            )
+    st.download_button(
+        "⬇️ Görseli indir",
+        image_bytes,
+        file_name="burakgpt.png",
+        mime="image/png"
+    )
+
 
     # -------- YAZI / ARAŞTIRMA --------
     else:
