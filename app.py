@@ -1,183 +1,59 @@
 import streamlit as st
 from openai import OpenAI
-from gradio_client import Client
+from PIL import Image
+import base64
+import io
 
-# =========================
-# CONFIG
-# =========================
+# Sayfa ayarları
 st.set_page_config(
-    page_title="🧠 Burak GPT",
+    page_title="BurakGPT",
     page_icon="🧠",
-    layout="wide"
+    layout="centered"
 )
 
-# =========================
-# CLIENTS
-# =========================
-openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-image_client = Client("burak12321/burak-gpt-image")
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# =========================
-# SESSION STATE
-# =========================
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+st.title("🧠 Burak GPT")
+st.caption("Yaz • Araştır • Görsel oluştur")
 
-# =========================
-# STYLE (PROFESSIONAL)
-# =========================
-st.markdown("""
-<style>
-body {
-    background-color: #0f172a;
-}
+# Mod seçimi
+mode = st.selectbox(
+    "Mod",
+    ["Yazı", "Araştırma", "Görsel"],
+    index=2
+)
 
-.chat-user {
-    background:#e0f2fe;
-    color:#020617;
-    padding:14px;
-    border-radius:16px;
-    margin:10px 0;
-    max-width:70%;
-    margin-left:auto;
-}
+prompt = st.text_input("Ne istiyorsun kral?", placeholder="istanbul manzarası")
 
-.chat-bot {
-    background:#1e293b;
-    color:#f8fafc;
-    padding:14px;
-    border-radius:16px;
-    margin:10px 0;
-    max-width:70%;
-}
+# === GÖRSEL MODU ===
+if mode == "Görsel" and prompt:
+    if st.button("🎨 Görsel oluştur"):
+        with st.spinner("🎨 BurakGPT çiziyor..."):
+            try:
+                result = client.images.generate(
+                    model="gpt-image-1",
+                    prompt=prompt,
+                    size="512x512"
+                )
 
-.input-bar {
-    background:#020617;
-    padding:14px;
-    border-radius:18px;
-}
+                image_base64 = result.data[0].b64_json
+                image_bytes = base64.b64decode(image_base64)
+                image = Image.open(io.BytesIO(image_bytes))
 
-.send-btn button {
-    background:#000 !important;
-    color:#fff !important;
-    border-radius:50% !important;
-    height:44px;
-    width:44px;
-}
-</style>
-""", unsafe_allow_html=True)
+                st.markdown("### 🖼 Oluşturulan Görsel")
+                st.image(image, width=300)  # 👈 KÜÇÜK + KARE
 
-# =========================
-# HEADER
-# =========================
-st.markdown("## 🧠 **Burak GPT**  \nYazı • Araştırma • Görsel")
+            except Exception as e:
+                st.error("Görsel oluşturulamadı 😕")
+                st.code(str(e))
 
-# =========================
-# CHAT HISTORY
-# =========================
-for role, msg in st.session_state.messages:
-    if role == "user":
-        st.markdown(f"<div class='chat-user'>{msg}</div>", unsafe_allow_html=True)
-    else:
-        st.markdown(f"<div class='chat-bot'>{msg}</div>", unsafe_allow_html=True)
-
-# =========================
-# INPUT BAR
-# =========================
-col_mode, col_input, col_send = st.columns([1, 6, 1])
-
-with col_mode:
-    mode = st.selectbox(
-        "",
-        ["💬 Sohbet", "🔍 Araştırma", "🎨 Görsel"],
-        label_visibility="collapsed"
-    )
-
-with col_input:
-    user_input = st.text_input(
-        "",
-        placeholder="Burak GPT’ye yaz…",
-        label_visibility="collapsed"
-    )
-
-with col_send:
-    send = st.button("➤")
-
-# =========================
-# FUNCTIONS
-# =========================
-def burak_gpt(prompt, mode):
-    system_style = {
-        "💬 Sohbet": "Samimi, zeki, emoji kullanan bir asistansın.",
-        "🔍 Araştırma": "Maddeli, net, öğretici anlat.",
-    }
-
-    response = openai_client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system_style.get(mode, "")},
-            *[
-                {"role": r, "content": m}
-                for r, m in st.session_state.messages
-            ],
-            {"role": "user", "content": prompt}
-        ]
-    )
-    return response.choices[0].message.content
-
-
-def generate_image(prompt):
-    result = image_client.predict(
-        prompt=prompt,
-        api_name="/generate"
-    )
-    return result["url"]
-
-# =========================
-# ACTION
-# =========================
-if send and user_input:
-    st.session_state.messages.append(("user", user_input))
-
-    if mode == "🎨 Görsel":
-        placeholder = st.empty()
-        placeholder.markdown("""
-        <div style="
-        width:100%;
-        height:420px;
-        background:#020617;
-        border-radius:16px;
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        color:#94a3b8;
-        font-size:18px;
-        animation:pulse 1.5s infinite;">
-        🎨 Burak GPT çiziyor…
-        </div>
-
-        <style>
-        @keyframes pulse {
-          0% { opacity:.4; }
-          50% { opacity:1; }
-          100% { opacity:.4; }
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-        try:
-            img_url = generate_image(user_input)
-            placeholder.image(img_url, use_container_width=True)
-            st.download_button(
-                "⬇️ Görseli indir",
-                data=img_url,
-                file_name="burakgpt.png"
-            )
-        except:
-            placeholder.error("❌ Görsel üretilemedi. Biraz sonra tekrar dene.")
-
-    else:
-        with st.spinner("🧠 Burak GPT düşünüyor…"):
-            reply = burak_gpt(user_input, mode)
-        st.session_state.messages.append(("assistant", reply))
-        st.rerun()
+# === YAZI MODU (kısaca hazır dursun) ===
+elif mode != "Görsel" and prompt:
+    with st.spinner("BurakGPT düşünüyor..."):
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
+        )
+        st.markdown(response.choices[0].message.content)
