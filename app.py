@@ -1,145 +1,152 @@
 import streamlit as st
-import requests, time
 from openai import OpenAI
-from PIL import Image
-from io import BytesIO
+from gradio_client import Client as HFClient
+import time
 
-# ===============================
+# =======================
 # CONFIG
-# ===============================
+# =======================
 st.set_page_config(
-    page_title="BurakGPT",
+    page_title="🧠 BurakGPT",
     page_icon="🧠",
     layout="wide"
 )
 
-# ===============================
-# DARK THEME CSS
-# ===============================
-st.markdown("""
-<style>
-/* Genel yazı rengi */
-html, body, [class*="css"] {
-    color: #ffffff !important;
-}
+# =======================
+# SECRETS
+# =======================
+OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
+HF_SPACE = st.secrets["HF_SPACE"]
+HF_TOKEN = st.secrets["HF_TOKEN"]
 
-/* Kullanıcı mesajı */
-.chat-bubble-user {
-    color: #ffffff !important;
-}
+openai_client = OpenAI(api_key=OPENAI_KEY)
+hf_client = HFClient(HF_SPACE, hf_token=HF_TOKEN)
 
-/* Bot mesajı */
-.chat-bubble-bot {
-    color: #e5e7eb !important;
-}
-
-/* Input yazısı */
-input, textarea {
-    color: #ffffff !important;
-    background-color: #020617 !important;
-}
-
-/* Placeholder */
-::placeholder {
-    color: #9ca3af !important;
-}
-
-# ===============================
-# API CLIENTS
-# ===============================
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
-HF_MODEL = "runwayml/stable-diffusion-v1-5"
-HF_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
-HF_HEADERS = {
-    "Authorization": f"Bearer {st.secrets['HF_TOKEN']}"
-}
-
-# ===============================
+# =======================
 # SESSION STATE
-# ===============================
+# =======================
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# ===============================
-# FUNCTIONS
-# ===============================
-def chat_gpt(prompt):
-    msgs = [{"role": "system", "content": "Samimi ama profesyonel cevap ver."}]
-    for r, c in st.session_state.messages:
-        msgs.append({"role": "user" if r=="user" else "assistant", "content": c})
-    msgs.append({"role": "user", "content": prompt})
+# =======================
+# STYLE (FULL DARK)
+# =======================
+st.markdown("""
+<style>
+body {
+    background: linear-gradient(180deg, #020617, #020617);
+}
 
-    res = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        messages=msgs
+.chat-bubble-user {
+    background: #2563eb;
+    color: white;
+    padding: 12px 16px;
+    border-radius: 16px;
+    margin: 6px 0;
+    max-width: 70%;
+    margin-left: auto;
+}
+
+.chat-bubble-bot {
+    background: #020617;
+    color: #e5e7eb;
+    padding: 12px 16px;
+    border-radius: 16px;
+    margin: 6px 0;
+    max-width: 70%;
+    border: 1px solid #1e293b;
+}
+
+input, textarea {
+    color: white !important;
+    background-color: #020617 !important;
+}
+
+::placeholder {
+    color: #9ca3af !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# =======================
+# TITLE
+# =======================
+st.markdown("## 🧠 **BurakGPT**")
+st.caption("Yazı • Araştırma • Görsel")
+
+# =======================
+# CHAT HISTORY
+# =======================
+for role, msg in st.session_state.messages:
+    css = "chat-bubble-user" if role == "user" else "chat-bubble-bot"
+    st.markdown(f"<div class='{css}'>{msg}</div>", unsafe_allow_html=True)
+
+# =======================
+# INPUT AREA
+# =======================
+col_mode, col_input, col_send = st.columns([1, 6, 1])
+
+with col_mode:
+    mode = st.selectbox(
+        "Mod",
+        ["Sohbet", "Araştırma", "Görsel"],
+        label_visibility="collapsed"
+    )
+
+with col_input:
+    user_input = st.text_input(
+        "Mesaj",
+        placeholder="BurakGPT’ye yaz...",
+        label_visibility="collapsed"
+    )
+
+with col_send:
+    send = st.button("➤")
+
+# =======================
+# FUNCTIONS
+# =======================
+def chat_gpt(prompt, mode):
+    styles = {
+        "Sohbet": "Samimi, kısa ve net cevap ver.",
+        "Araştırma": "Maddeli, öğretici ve net anlat."
+    }
+
+    messages = [{"role": "system", "content": styles.get(mode, "")}]
+    for r, m in st.session_state.messages:
+        messages.append({"role": r, "content": m})
+    messages.append({"role": "user", "content": prompt})
+
+    res = openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=messages
     )
     return res.choices[0].message.content
 
+
 def generate_image(prompt):
-    payload = {"inputs": prompt}
-    for _ in range(3):
-        r = requests.post(HF_URL, headers=HF_HEADERS, json=payload)
-        if r.status_code == 200:
-            return Image.open(BytesIO(r.content))
-        if r.status_code == 503:
-            time.sleep(5)
-    return None
+    try:
+        result = hf_client.predict(prompt, api_name="/predict")
+        return result["url"] if isinstance(result, dict) else result
+    except Exception as e:
+        return None
 
-# ===============================
-# TITLE
-# ===============================
-st.markdown("## 🧠 **BurakGPT**")
-st.caption("Sohbet • Araştırma • Görsel")
-
-# ===============================
-# CHAT HISTORY
-# ===============================
-for role, content in st.session_state.messages:
-    css = "chat-bubble-user" if role=="user" else "chat-bubble-bot"
-    st.markdown(f"<div class='{css}'>{content}</div>", unsafe_allow_html=True)
-
-# ===============================
-# INPUT BAR
-# ===============================
-with st.container():
-    c1, c2, c3 = st.columns([1,5,1])
-
-    with c1:
-        mode = st.selectbox(
-            "",
-            ["💬 Sohbet", "🔍 Araştırma", "🎨 Görsel"],
-            label_visibility="collapsed"
-        )
-
-    with c2:
-        user_input = st.text_input(
-            "",
-            placeholder="BurakGPT’ye yaz…",
-            label_visibility="collapsed"
-        )
-
-    with c3:
-        send = st.button("➤")
-
-# ===============================
+# =======================
 # ACTION
-# ===============================
+# =======================
 if send and user_input:
     st.session_state.messages.append(("user", user_input))
 
-    if "Görsel" in mode:
-        with st.spinner("🎨 Görsel hazırlanıyor..."):
-            img = generate_image(user_input)
-            if img:
-                st.image(img, use_container_width=False, width=512)
-                st.session_state.messages.append(("bot", "🖼️ Görsel hazır"))
+    if mode == "Görsel":
+        with st.spinner("🎨 Görsel oluşturuluyor..."):
+            img_url = generate_image(user_input)
+            if img_url:
+                st.image(img_url, caption="BurakGPT Görsel", use_column_width=False, width=512)
             else:
-                st.session_state.messages.append(("bot", "⚠️ Görsel motoru yoğun, biraz sonra dene"))
+                st.error("❌ Görsel üretilemedi. Biraz sonra tekrar dene.")
 
     else:
         with st.spinner("🧠 BurakGPT düşünüyor..."):
-            reply = chat_gpt(user_input)
-            st.session_state.messages.append(("bot", reply))
-
-    st.rerun()
+            reply = chat_gpt(user_input, mode)
+            st.session_state.messages.append(("assistant", reply))
+            st.rerun()
