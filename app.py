@@ -1,95 +1,140 @@
 import streamlit as st
-import requests
+import requests, time
 from openai import OpenAI
-from PIL import Image, ImageFilter
+from PIL import Image
 from io import BytesIO
-import time
 
-# ---------------- CONFIG ----------------
-st.set_page_config("BurakGPT", "🧠", layout="wide")
+# ===============================
+# CONFIG
+# ===============================
+st.set_page_config(
+    page_title="BurakGPT",
+    page_icon="🧠",
+    layout="wide"
+)
 
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
-HF_TOKEN = st.secrets["HF_TOKEN"]
-HF_MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
-HF_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
-HF_HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"}
-
-# ---------------- STYLE ----------------
+# ===============================
+# DARK THEME CSS
+# ===============================
 st.markdown("""
 <style>
-body { background:#0b0f19; color:white; }
-.chat { padding:12px; border-radius:12px; margin:8px 0; max-width:75%; }
-.user { background:#1f2937; margin-left:auto; }
-.bot { background:#111827; }
-input { background:#111827 !important; color:white !important; }
+body { background-color:#0f1117; }
+.chat-bubble-user {
+    background:#1f2937;
+    padding:12px;
+    border-radius:12px;
+    margin:6px 0;
+}
+.chat-bubble-bot {
+    background:#111827;
+    padding:12px;
+    border-radius:12px;
+    margin:6px 0;
+}
+.input-box {
+    background:#020617;
+    padding:12px;
+    border-radius:14px;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- STATE ----------------
+# ===============================
+# API CLIENTS
+# ===============================
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
+HF_MODEL = "runwayml/stable-diffusion-v1-5"
+HF_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
+HF_HEADERS = {
+    "Authorization": f"Bearer {st.secrets['HF_TOKEN']}"
+}
+
+# ===============================
+# SESSION STATE
+# ===============================
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# ---------------- LAYOUT ----------------
-left, right = st.columns([1,5])
+# ===============================
+# FUNCTIONS
+# ===============================
+def chat_gpt(prompt):
+    msgs = [{"role": "system", "content": "Samimi ama profesyonel cevap ver."}]
+    for r, c in st.session_state.messages:
+        msgs.append({"role": "user" if r=="user" else "assistant", "content": c})
+    msgs.append({"role": "user", "content": prompt})
 
-with left:
-    st.markdown("### ⚙️ Mod")
-    mode = st.radio("", ["💬 Sohbet", "🎨 Görsel"], label_visibility="collapsed")
+    res = client.chat.completions.create(
+        model="gpt-4.1-mini",
+        messages=msgs
+    )
+    return res.choices[0].message.content
 
-with right:
-    st.markdown("## 🧠 BurakGPT")
+def generate_image(prompt):
+    payload = {"inputs": prompt}
+    for _ in range(3):
+        r = requests.post(HF_URL, headers=HF_HEADERS, json=payload)
+        if r.status_code == 200:
+            return Image.open(BytesIO(r.content))
+        if r.status_code == 503:
+            time.sleep(5)
+    return None
 
-    for m in st.session_state.messages:
-        role = "user" if m["role"] == "user" else "bot"
-        st.markdown(
-            f"<div class='chat {role}'>{m['content']}</div>",
-            unsafe_allow_html=True
+# ===============================
+# TITLE
+# ===============================
+st.markdown("## 🧠 **BurakGPT**")
+st.caption("Sohbet • Araştırma • Görsel")
+
+# ===============================
+# CHAT HISTORY
+# ===============================
+for role, content in st.session_state.messages:
+    css = "chat-bubble-user" if role=="user" else "chat-bubble-bot"
+    st.markdown(f"<div class='{css}'>{content}</div>", unsafe_allow_html=True)
+
+# ===============================
+# INPUT BAR
+# ===============================
+with st.container():
+    c1, c2, c3 = st.columns([1,5,1])
+
+    with c1:
+        mode = st.selectbox(
+            "",
+            ["💬 Sohbet", "🔍 Araştırma", "🎨 Görsel"],
+            label_visibility="collapsed"
         )
 
-    prompt = st.text_input(
-        "",
-        placeholder="Yaz kral… (örn: cyberpunk şehir çiz)"
-    )
-    send = st.button("🚀 Gönder")
+    with c2:
+        user_input = st.text_input(
+            "",
+            placeholder="BurakGPT’ye yaz…",
+            label_visibility="collapsed"
+        )
 
-# ---------------- ACTION ----------------
-if send and prompt:
-    st.session_state.messages.append({"role":"user","content":prompt})
+    with c3:
+        send = st.button("➤")
+
+# ===============================
+# ACTION
+# ===============================
+if send and user_input:
+    st.session_state.messages.append(("user", user_input))
 
     if "Görsel" in mode:
-        with st.spinner("🎨 Görsel oluşturuluyor..."):
-            payload = {
-                "inputs": prompt,
-                "parameters": {"steps": 35, "guidance_scale": 8.5}
-            }
-
-            r = requests.post(HF_URL, headers=HF_HEADERS, json=payload)
-
-            if r.status_code == 200:
-                img = Image.open(BytesIO(r.content))
-                blurred = img.filter(ImageFilter.GaussianBlur(16))
-
-                holder = st.empty()
-                holder.image(blurred, caption="Yükleniyor...")
-                time.sleep(1.2)
-                holder.image(img, caption="🖼️ Hazır")
-
-                st.session_state.messages.append({
-                    "role":"assistant",
-                    "content":"Görsel hazır kral 🎨"
-                })
+        with st.spinner("🎨 Görsel hazırlanıyor..."):
+            img = generate_image(user_input)
+            if img:
+                st.image(img, use_container_width=False, width=512)
+                st.session_state.messages.append(("bot", "🖼️ Görsel hazır"))
             else:
-                st.error("HF görsel üretim hatası")
+                st.session_state.messages.append(("bot", "⚠️ Görsel motoru yoğun, biraz sonra dene"))
 
     else:
-        with st.spinner("🧠 Düşünüyorum..."):
-            res = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=st.session_state.messages
-            )
-            reply = res.choices[0].message.content
-            st.session_state.messages.append(
-                {"role":"assistant","content":reply}
-            )
-            st.rerun()
+        with st.spinner("🧠 BurakGPT düşünüyor..."):
+            reply = chat_gpt(user_input)
+            st.session_state.messages.append(("bot", reply))
+
+    st.rerun()
