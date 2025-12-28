@@ -1,7 +1,3 @@
-gradio
-diffusers
-transformers
-torch
-accelerate
-Pillow
+streamlit
 openai
+gradio-client
