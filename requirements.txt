@@ -1,3 +1,4 @@
 streamlit
 openai
-gradio-client
+requests
+pillow
