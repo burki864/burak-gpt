@@ -1,132 +1,126 @@
 import streamlit as st
-from gradio_client import Client
+import requests
 from openai import OpenAI
+from PIL import Image, ImageFilter
+from io import BytesIO
+import time
 
-# =====================
-# CONFIG
-# =====================
-HF_SPACE_URL = "https://burak12321-generate-image-burakgpt.hf.space"
-
-# =====================
-# PAGE
-# =====================
+# ---------------- CONFIG ----------------
 st.set_page_config(
     page_title="BurakGPT",
     page_icon="🧠",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# =====================
-# DARK MODE CSS
-# =====================
+HF_TOKEN = st.secrets["HF_TOKEN"]
+OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
+
+client = OpenAI(api_key=OPENAI_KEY)
+
+HF_MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
+HF_URL = f"https://api-inference.huggingface.co/models/{HF_MODEL}"
+HF_HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"}
+
+# ---------------- STYLE ----------------
 st.markdown("""
 <style>
-body, .stApp {
-    background-color: #0f1117;
-    color: #e6e6e6;
-}
-textarea, input {
-    background-color: #1c1f26 !important;
-    color: white !important;
-}
-.stButton>button {
-    background: linear-gradient(135deg,#6a11cb,#2575fc);
+body {
+    background-color: #0b0f19;
     color: white;
-    border-radius: 10px;
-    padding: 10px 16px;
 }
-.stChatMessage {
-    background-color: #1c1f26;
+.chat {
+    padding: 12px;
     border-radius: 12px;
-    padding: 10px;
+    margin-bottom: 10px;
+    max-width: 80%;
+}
+.user {
+    background: #1f2937;
+    margin-left: auto;
+}
+.bot {
+    background: #111827;
+}
+input {
+    background-color:#111827 !important;
+    color:white !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# =====================
-# SIDEBAR
-# =====================
-st.sidebar.title("⚙️ BurakGPT")
-mode = st.sidebar.radio(
-    "Mod Seç",
-    ["💬 Sohbet", "🎨 Görsel Üret"],
-)
+# ---------------- STATE ----------------
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-st.sidebar.markdown("---")
-st.sidebar.caption("Dark Mode • HF + OpenAI")
+# ---------------- UI LAYOUT ----------------
+left, right = st.columns([1,5])
 
-# =====================
-# HEADER
-# =====================
-st.title("🧠 BurakGPT")
-st.caption("Profesyonel yapay zeka • Sohbet + Görsel üretim")
+with left:
+    st.markdown("### ⚙️ Mod")
+    mode = st.radio("", ["💬 Sohbet", "🎨 Görsel"], label_visibility="collapsed")
 
-# =====================
-# OPENAI CLIENT
-# =====================
-if "OPENAI_API_KEY" not in st.secrets:
-    st.error("❌ OPENAI_API_KEY Secrets'e eklenmemiş")
-    st.stop()
-
-client_ai = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
-# =====================
-# CHAT MODE
-# =====================
-if mode == "💬 Sohbet":
-
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+with right:
+    st.markdown("## 🧠 BurakGPT")
 
     for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+        role = "user" if msg["role"] == "user" else "bot"
+        st.markdown(
+            f"<div class='chat {role}'>{msg['content']}</div>",
+            unsafe_allow_html=True
+        )
 
-    prompt = st.chat_input("BurakGPT’ye yaz...")
-
-    if prompt:
-        st.session_state.messages.append({"role": "user", "content": prompt})
-
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        with st.chat_message("assistant"):
-            with st.spinner("🧠 Düşünüyorum..."):
-                response = client_ai.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=st.session_state.messages
-                )
-                reply = response.choices[0].message.content
-                st.markdown(reply)
-
-        st.session_state.messages.append({"role": "assistant", "content": reply})
-
-# =====================
-# IMAGE MODE
-# =====================
-elif mode == "🎨 Görsel Üret":
-
-    st.subheader("🎨 Görsel Üret")
-
-    prompt = st.text_area(
-        "Görseli tarif et",
-        placeholder="Cyberpunk İstanbul, neon ışıklar, sinematik, ultra detay",
-        height=120
+    prompt = st.text_input(
+        "Mesaj yaz ya da 'Cyberpunk şehir çiz' gibi komut ver",
+        placeholder="Buraya yaz kral…"
     )
 
-    if st.button("🚀 Görsel Oluştur"):
-        if not prompt.strip():
-            st.warning("Prompt boş olamaz")
-        else:
-            with st.spinner("🎨 Görsel oluşturuluyor..."):
-                hf_client = Client(HF_SPACE_URL)
-                result = hf_client.predict(prompt, api_name="/predict")
+    send = st.button("Gönder 🚀")
 
-            st.image(result, caption="BurakGPT tarafından üretildi", use_container_width=True)
+# ---------------- ACTION ----------------
+if send and prompt:
+    st.session_state.messages.append({"role": "user", "content": prompt})
 
-# =====================
-# FOOTER
-# =====================
-st.markdown("---")
-st.caption("⚡ BurakGPT • HF Spaces + OpenAI • 2025")
+    # ---------- IMAGE MODE ----------
+    if "Görsel" in mode:
+        with st.spinner("🎨 Görsel oluşturuluyor..."):
+            payload = {
+                "inputs": prompt,
+                "parameters": {
+                    "steps": 30,
+                    "guidance_scale": 8
+                }
+            }
+
+            r = requests.post(HF_URL, headers=HF_HEADERS, json=payload)
+
+            if r.status_code == 200:
+                img = Image.open(BytesIO(r.content))
+
+                # -------- EFFECT --------
+                blurred = img.filter(ImageFilter.GaussianBlur(18))
+                placeholder = st.empty()
+
+                placeholder.image(blurred, caption="Yükleniyor...", use_container_width=False)
+                time.sleep(1.2)
+
+                placeholder.image(img, caption="🖼️ Görsel hazır", use_container_width=False)
+
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": "Görseli senin için oluşturdum 🎨"
+                })
+            else:
+                st.error("Görsel üretilemedi (HF)")
+
+    # ---------- CHAT MODE ----------
+    else:
+        with st.spinner("🧠 Düşünüyorum..."):
+            res = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=st.session_state.messages
+            )
+            reply = res.choices[0].message.content
+            st.session_state.messages.append(
+                {"role": "assistant", "content": reply}
+            )
+            st.rerun()
