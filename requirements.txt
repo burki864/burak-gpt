@@ -1,5 +1,7 @@
-streamlit
-openai>=1.0.0
-requests
-pillow
 gradio
+diffusers
+transformers
+torch
+accelerate
+Pillow
+openai
