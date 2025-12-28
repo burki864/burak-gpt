@@ -1,128 +1,157 @@
 import streamlit as st
-from openai import OpenAI
-from gradio_client import Client
-import time
+import requests
+import os
+from PIL import Image
+from io import BytesIO
 
-# ---------------- CONFIG ----------------
+# --------------------------------------------------
+# CONFIG
+# --------------------------------------------------
 st.set_page_config(
-    page_title="Burak GPT",
+    page_title="BurakGPT",
     page_icon="🧠",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
-# ---------------- SECRETS ----------------
-OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
-HF_SPACE_URL = st.secrets["HF_SPACE_URL"]
-
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
-hf_client = Client(HF_SPACE_URL)
-
-# ---------------- SESSION ----------------
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-# ---------------- STYLE ----------------
+# --------------------------------------------------
+# DARK MODE + CUSTOM CSS
+# --------------------------------------------------
 st.markdown("""
 <style>
-body {
-    background-color: #0f172a;
+html, body, [class*="css"] {
+    background-color: #0f1117;
+    color: #e6e6eb;
+    font-family: 'Inter', sans-serif;
 }
-.chat-user {
-    background:#2563eb;
-    color:white;
-    padding:12px;
-    border-radius:12px;
-    margin:8px 0;
-    width:fit-content;
+
+.main {
+    background-color: #0f1117;
 }
-.chat-bot {
-    background:#1e293b;
-    color:white;
-    padding:12px;
-    border-radius:12px;
-    margin:8px 0;
-    width:fit-content;
+
+input, textarea {
+    background-color: #1a1d29 !important;
+    color: #ffffff !important;
+    border-radius: 12px !important;
 }
-.image-box {
-    background:#111827;
-    border-radius:16px;
-    padding:20px;
-    text-align:center;
+
+.stButton>button {
+    background: linear-gradient(135deg, #6a5cff, #8b7bff);
+    color: white;
+    border-radius: 14px;
+    padding: 0.6rem 1.4rem;
+    border: none;
+    font-weight: 600;
+}
+
+.stButton>button:hover {
+    transform: scale(1.02);
+    background: linear-gradient(135deg, #7a6cff, #9b8bff);
+}
+
+.chat-bubble-user {
+    background-color: #1f2333;
+    padding: 14px;
+    border-radius: 16px;
+    margin: 6px 0;
+}
+
+.chat-bubble-ai {
+    background-color: #141826;
+    padding: 14px;
+    border-radius: 16px;
+    margin: 6px 0;
+    border-left: 3px solid #6a5cff;
+}
+
+.footer-note {
+    opacity: 0.6;
+    font-size: 0.85rem;
+    text-align: center;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- HEADER ----------------
-st.title("🧠 Burak GPT")
-st.caption("Yazı • Araştırma • Görsel")
+# --------------------------------------------------
+# TITLE
+# --------------------------------------------------
+st.markdown("## 🧠 **BurakGPT**")
+st.markdown("Profesyonel yapay zeka • Görsel üretim • Dark mode ⚡")
 
-# ---------------- INPUT BAR ----------------
-col1, col2, col3 = st.columns([2, 8, 1])
+# --------------------------------------------------
+# SECRETS
+# --------------------------------------------------
+HF_TOKEN = os.getenv("HF_TOKEN")
+if not HF_TOKEN:
+    st.error("❌ HF_TOKEN bulunamadı. Secrets kısmına eklemen gerekiyor.")
+    st.stop()
 
-with col1:
-    mode = st.selectbox(
-        "",
-        ["Yazı", "Araştırma", "Görsel"],
-        label_visibility="collapsed"
+# --------------------------------------------------
+# SIDEBAR (MODE SELECT)
+# --------------------------------------------------
+with st.sidebar:
+    st.markdown("### ⚙️ Mod Seçimi")
+    mode = st.radio(
+        "BurakGPT modu",
+        ["🖼 Görsel Üretim", "💬 Sohbet (yakında)"],
+        index=0
     )
 
-with col2:
-    user_input = st.text_input(
-        "",
-        placeholder="Bir şey yaz..."
+    st.markdown("---")
+    st.markdown("**Durum:** 🟢 Aktif")
+    st.markdown("**Altyapı:** Hugging Face")
+    st.markdown("**Tema:** Dark Mode")
+
+# --------------------------------------------------
+# IMAGE GENERATION MODE
+# --------------------------------------------------
+if mode.startswith("🖼"):
+
+    st.markdown("### 🎨 Görsel Üretici")
+
+    prompt = st.text_area(
+        "Görseli tarif et",
+        placeholder="Cyberpunk İstanbul, neon ışıklar, gece, sinematik, ultra detaylı...",
+        height=120
     )
 
-with col3:
-    send = st.button("▶")
+    col1, col2 = st.columns([6,1])
+    with col2:
+        generate = st.button("🚀 Oluştur")
 
-# ---------------- FUNCTIONS ----------------
-def burak_gpt_text(prompt, mode):
-    system_prompt = {
-        "Yazı": "Samimi, net ve akıllı cevap ver.",
-        "Araştırma": "Maddeli, öğretici ve detaylı anlat."
-    }.get(mode, "")
+    if generate and prompt.strip():
 
-    response = openai_client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt}
-        ]
-    )
+        with st.spinner("🧠 BurakGPT düşünüyor, görsel çiziliyor..."):
+            API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+            headers = {
+                "Authorization": f"Bearer {HF_TOKEN}"
+            }
 
-    return response.choices[0].message.content
+            response = requests.post(
+                API_URL,
+                headers=headers,
+                json={"inputs": prompt},
+                timeout=120
+            )
 
-def burak_gpt_image(prompt):
-    result = hf_client.predict(
-        prompt=prompt,
-        api_name="/generate"
-    )
-    return result["url"]
+            if response.status_code != 200:
+                st.error("❌ Görsel üretilemedi. Biraz sonra tekrar dene.")
+            else:
+                image = Image.open(BytesIO(response.content))
+                st.image(image, caption="✨ BurakGPT tarafından üretildi", use_container_width=True)
 
-# ---------------- SEND ----------------
-if send and user_input:
-    st.session_state.messages.append(("user", user_input, mode))
+# --------------------------------------------------
+# CHAT PLACEHOLDER
+# --------------------------------------------------
+else:
+    st.markdown("### 💬 Sohbet")
+    st.info("Bu mod yakında aktif olacak. BurakGPT öğrenmeye devam ediyor 👀")
 
-    if mode == "Görsel":
-        with st.spinner("🎨 Burak GPT çiziyor..."):
-            img_url = burak_gpt_image(user_input)
-            st.session_state.messages.append(("image", img_url, mode))
-    else:
-        with st.spinner("🧠 Burak GPT düşünüyor..."):
-            reply = burak_gpt_text(user_input, mode)
-            st.session_state.messages.append(("bot", reply, mode))
-
-# ---------------- CHAT AREA ----------------
-st.divider()
-
-for role, content, mode in st.session_state.messages:
-    if role == "user":
-        st.markdown(f"<div class='chat-user'>🧑 {content}</div>", unsafe_allow_html=True)
-
-    elif role == "bot":
-        st.markdown(f"<div class='chat-bot'>🤖 {content}</div>", unsafe_allow_html=True)
-
-    elif role == "image":
-        st.markdown("<div class='image-box'>", unsafe_allow_html=True)
-        st.image(content, width=512)
-        st.markdown("</div>", unsafe_allow_html=True)
+# --------------------------------------------------
+# FOOTER
+# --------------------------------------------------
+st.markdown("""
+<div class="footer-note">
+BurakGPT © 2025 • Deneysel Yapay Zeka Platformu
+</div>
+""", unsafe_allow_html=True)
