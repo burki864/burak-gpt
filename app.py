@@ -18,26 +18,31 @@ st.set_page_config(
 # ===============================
 st.markdown("""
 <style>
-body { background-color:#0f1117; }
+/* Genel yazı rengi */
+html, body, [class*="css"] {
+    color: #ffffff !important;
+}
+
+/* Kullanıcı mesajı */
 .chat-bubble-user {
-    background:#1f2937;
-    padding:12px;
-    border-radius:12px;
-    margin:6px 0;
+    color: #ffffff !important;
 }
+
+/* Bot mesajı */
 .chat-bubble-bot {
-    background:#111827;
-    padding:12px;
-    border-radius:12px;
-    margin:6px 0;
+    color: #e5e7eb !important;
 }
-.input-box {
-    background:#020617;
-    padding:12px;
-    border-radius:14px;
+
+/* Input yazısı */
+input, textarea {
+    color: #ffffff !important;
+    background-color: #020617 !important;
 }
-</style>
-""", unsafe_allow_html=True)
+
+/* Placeholder */
+::placeholder {
+    color: #9ca3af !important;
+}
 
 # ===============================
 # API CLIENTS
