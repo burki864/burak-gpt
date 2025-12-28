@@ -115,6 +115,6 @@ else:
         with st.spinner("Görsel oluşturuluyor..."):
             try:
                 image = hf_client.predict(prompt)
-                st.image(image, use_column_width=True)
+                st.image(image, width=320)
             except Exception as e:
                 st.error(f"Hata: {e}")
