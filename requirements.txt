@@ -4,3 +4,4 @@ requests
 gradio-client
 huggingface-hub
 pillow
+streamlit-authenticator
