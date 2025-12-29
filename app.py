@@ -1,14 +1,17 @@
 import streamlit as st
 import os
 import time
+import requests
+from io import BytesIO
+from PIL import Image
 from openai import OpenAI
-from gradio_client import Client
 
 # ---------------- PAGE ----------------
 st.set_page_config(
     page_title="Burak GPT",
     page_icon="🤖",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"  # menü AÇIK başlar
 )
 
 # ---------------- THEME STATE ----------------
@@ -56,24 +59,40 @@ section[data-testid="stSidebar"] {{
 # ---------------- SECRETS ----------------
 OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
 HF_TOKEN = st.secrets["HF_TOKEN"]
-os.environ["HF_TOKEN"] = HF_TOKEN
 
-# ---------------- CLIENTS ----------------
 openai_client = OpenAI(api_key=OPENAI_KEY)
-hf_client = Client("burak12321/burak-gpt-image")
 
-# ---------------- AUTH STATE ----------------
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-    st.session_state.user = {}
+# ---------------- HF IMAGE API (HIZLI) ----------------
+HF_API_URL = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5"
+HF_HEADERS = {
+    "Authorization": f"Bearer {HF_TOKEN}"
+}
+
+def generate_image(prompt):
+    response = requests.post(
+        HF_API_URL,
+        headers=HF_HEADERS,
+        json={
+            "inputs": prompt,
+            "options": {"wait_for_model": True}
+        },
+        timeout=120
+    )
+
+    if response.status_code != 200:
+        raise Exception("HF görsel üretim hatası")
+
+    return Image.open(BytesIO(response.content))
 
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.title("⚙️ Menü")
 
-    if st.button("🌙 / ☀️ Tema Değiştir"):
-        st.session_state.theme = "light" if dark else "dark"
-        st.rerun()
+    # Tema kontrolü (isteğe bağlı)
+    if st.checkbox("🌙 / ☀️ Tema Değiştir", value=True):
+        if st.button("Temayı Değiştir"):
+            st.session_state.theme = "light" if dark else "dark"
+            st.rerun()
 
     mode = st.radio(
         "Mod Seç",
@@ -81,45 +100,8 @@ with st.sidebar:
     )
 
     st.divider()
-
-    if not st.session_state.logged_in:
-        st.subheader("🔐 Giriş / Kayıt")
-
-        email = st.text_input("Email")
-        password = st.text_input("Şifre", type="password")
-
-        if st.button("Giriş Yap"):
-            st.session_state.logged_in = True
-            st.session_state.user = {
-                "email": email,
-                "name": "Kullanıcı"
-            }
-            st.success("Giriş başarılı")
-            st.rerun()
-
-        st.markdown("---")
-        name = st.text_input("Ad")
-        surname = st.text_input("Soyad (opsiyonel)")
-
-        if st.button("Kayıt Ol"):
-            st.session_state.logged_in = True
-            st.session_state.user = {
-                "email": email,
-                "name": name,
-                "surname": surname
-            }
-            st.success("Kayıt başarılı")
-            st.rerun()
-
-    else:
-        st.success("👤 Giriş Yapıldı")
-        st.markdown(f"**{st.session_state.user.get('name','')}**")
-        st.markdown(st.session_state.user.get("email",""))
-
-        if st.button("Çıkış Yap"):
-            st.session_state.logged_in = False
-            st.session_state.user = {}
-            st.rerun()
+    st.markdown("**Burak GPT**")
+    st.markdown("HF • OpenAI • Dark/Light")
 
 # ---------------- SESSION ----------------
 if "messages" not in st.session_state:
@@ -127,11 +109,7 @@ if "messages" not in st.session_state:
 
 # ---------------- MAIN ----------------
 st.title("🤖 Burak GPT")
-
-# 🔒 KİLİT — GİRİŞ YOKSA DUR
-if not st.session_state.logged_in:
-    st.warning("🔒 Devam etmek için giriş yapman gerekiyor")
-    st.stop()
+st.caption("Hızlı • Ücretsiz • Stabil")
 
 # ---------------- CHAT ----------------
 if mode == "💬 Sohbet":
@@ -150,7 +128,9 @@ if mode == "💬 Sohbet":
     user_input = st.text_input("Mesaj yaz...")
 
     if st.button("Gönder") and user_input:
-        st.session_state.messages.append({"role": "user", "content": user_input})
+        st.session_state.messages.append(
+            {"role": "user", "content": user_input}
+        )
 
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
@@ -158,7 +138,9 @@ if mode == "💬 Sohbet":
         )
 
         reply = response.choices[0].message.content
-        st.session_state.messages.append({"role": "assistant", "content": reply})
+        st.session_state.messages.append(
+            {"role": "assistant", "content": reply}
+        )
         st.rerun()
 
 # ---------------- IMAGE ----------------
@@ -168,22 +150,24 @@ elif mode == "🎨 Görsel Üretim":
     if st.button("Görsel Oluştur") and prompt:
         progress = st.progress(0, text="Hazırlanıyor...")
 
-        progress.progress(30, "Model yükleniyor")
-        time.sleep(0.4)
+        progress.progress(25, "Model hazırlanıyor")
+        time.sleep(0.3)
 
-        progress.progress(60, "Görsel çiziliyor")
-        image = hf_client.predict(prompt)
+        progress.progress(55, "Görsel çiziliyor")
+        image = generate_image(prompt)
 
-        progress.progress(100, "Tamamlandı")
+        progress.progress(100, "Tamamlandı ✔")
         st.image(image, width=320)
 
 # ---------------- RESEARCH ----------------
 else:
     query = st.text_input("Araştırma konusu yaz")
 
-    if st.button("Araştır") and query:
+    if st.button("Araştır"):
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": f"Araştır: {query}"}]
+            messages=[
+                {"role": "user", "content": f"Araştır: {query}"}
+            ]
         )
         st.markdown(response.choices[0].message.content)
