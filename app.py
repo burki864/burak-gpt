@@ -111,10 +111,24 @@ if mode == "💬 Sohbet":
 else:
     prompt = st.text_input("Görsel açıklaması yaz")
 
-    if st.button("Görsel Oluştur") and prompt:
-        with st.spinner("Görsel oluşturuluyor..."):
-            try:
-                image = hf_client.predict(prompt)
-                st.image(image, width=320)
-            except Exception as e:
-                st.error(f"Hata: {e}")
+   if st.button("Görsel Oluştur") and prompt:
+    progress = st.progress(0, text="Görsel hazırlanıyor...")
+
+    try:
+        progress.progress(15, text="Model yükleniyor...")
+        time.sleep(0.3)
+
+        progress.progress(35, text="GPU hazırlanıyor...")
+        time.sleep(0.3)
+
+        progress.progress(60, text="Görsel oluşturuluyor...")
+        image = hf_client.predict(prompt)
+
+        progress.progress(90, text="Son dokunuşlar...")
+        time.sleep(0.2)
+
+        progress.progress(100, text="Tamamlandı ✔️")
+        st.image(image, width=320)
+
+    except Exception as e:
+        st.error(f"Hata: {e}")
