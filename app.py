@@ -85,9 +85,12 @@ with st.sidebar:
 
 # ---------------- POPUPS ----------------
 if st.session_state.show_login:
-    with st.dialog("Giriş Yap"):
-        email = st.text_input("Email")
-        password = st.text_input("Şifre", type="password")
+    st.markdown("### 🔐 Giriş Yap")
+    email = st.text_input("Email", key="login_email")
+    password = st.text_input("Şifre", type="password", key="login_pass")
+
+    col1, col2 = st.columns(2)
+    with col1:
         if st.button("Giriş"):
             if email and password:
                 st.session_state.logged_in = True
@@ -96,13 +99,19 @@ if st.session_state.show_login:
                 st.rerun()
             else:
                 st.error("Bilgiler eksik")
-
+    with col2:
+        if st.button("İptal"):
+            st.session_state.show_login = False
+            st.rerun()
 if st.session_state.show_register:
-    with st.dialog("Kayıt Ol"):
-        name = st.text_input("Ad *")
-        surname = st.text_input("Soyad")
-        email = st.text_input("Email")
-        password = st.text_input("Şifre", type="password")
+    st.markdown("### 📝 Kayıt Ol")
+    name = st.text_input("Ad *")
+    surname = st.text_input("Soyad (isteğe bağlı)")
+    email = st.text_input("Email", key="reg_email")
+    password = st.text_input("Şifre", type="password", key="reg_pass")
+
+    col1, col2 = st.columns(2)
+    with col1:
         if st.button("Kayıt Ol"):
             if not name or not email or not password:
                 st.error("Zorunlu alanlar boş")
@@ -115,16 +124,20 @@ if st.session_state.show_register:
                 st.session_state.show_register = False
                 st.rerun()
 
-if st.session_state.show_profile:
-    with st.dialog("Profil"):
-        st.write("👤", st.session_state.user.get("name"))
-        st.write("📧", st.session_state.user.get("email"))
-        if st.button("Çıkış Yap"):
-            st.session_state.logged_in = False
-            st.session_state.user = {}
-            st.session_state.show_profile = False
+    with col2:
+        if st.button("İptal"):
+            st.session_state.show_register = False
             st.rerun()
+if st.session_state.show_profile:
+    st.markdown("### 👤 Profil")
+    st.write("**Ad:**", st.session_state.user.get("name"))
+    st.write("**Email:**", st.session_state.user.get("email"))
 
+    if st.button("Çıkış Yap"):
+        st.session_state.logged_in = False
+        st.session_state.user = {}
+        st.session_state.show_profile = False
+        st.rerun()
 # ---------------- MAIN ----------------
 st.title("🤖 Burak GPT")
 st.caption("Sohbet • Araştırma • Görsel Üretim")
