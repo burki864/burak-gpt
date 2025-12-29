@@ -1,0 +1,14 @@
+credentials:
+  usernames:
+    burak:
+      email: burak@example.com
+      name: Burak
+      password: ''
+
+cookie:
+  expiry_days: 30
+  key: burak_gpt_cookie
+  name: burak_gpt
+
+preauthorized:
+  emails: []
