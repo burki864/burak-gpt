@@ -1,184 +1,116 @@
 import streamlit as st
-import os
-import time
-from openai import OpenAI
-from gradio_client import Client
 
-# ---------------- PAGE ----------------
-st.set_page_config(
-    page_title="Burak GPT",
-    page_icon="🤖",
-    layout="wide"
-)
+# ---------- AYAR ----------
+st.set_page_config(page_title="Burak GPT", layout="wide")
 
-# ---------------- SESSION DEFAULTS ----------------
-for key, value in {
-    "logged_in": False,
-    "user": {},
-    "show_login": False,
-    "show_register": False,
-    "show_profile": False,
-    "theme": "dark",
-    "messages": []
-}.items():
-    if key not in st.session_state:
-        st.session_state[key] = value
+# ---------- SESSION ----------
+if "user" not in st.session_state:
+    st.session_state.user = None
 
-# ---------------- THEME ----------------
-bg = "#0e0e0e" if st.session_state.theme == "dark" else "#ffffff"
-text = "#ffffff" if st.session_state.theme == "dark" else "#000000"
-box = "#1e1e1e" if st.session_state.theme == "dark" else "#f2f2f2"
+if "show_login" not in st.session_state:
+    st.session_state.show_login = False
 
-st.markdown(f"""
+if "show_register" not in st.session_state:
+    st.session_state.show_register = False
+
+
+# ---------- CSS ----------
+st.markdown("""
 <style>
-.stApp {{ background-color:{bg}; color:{text}; }}
-input, textarea {{
-    background-color:{box} !important;
-    color:{text} !important;
-}}
-section[data-testid="stSidebar"] * {{
-    color:{text} !important;
-}}
-.chat-user {{
-    background:{box};
-    padding:12px;
-    border-radius:10px;
-}}
-.chat-bot {{
-    background:#2a2a2a;
-    padding:12px;
-    border-radius:10px;
-}}
+.menu-text {
+    font-weight: 600;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- SECRETS ----------------
-OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
-HF_TOKEN = st.secrets["HF_TOKEN"]
-os.environ["HF_TOKEN"] = HF_TOKEN
 
-# ---------------- CLIENTS ----------------
-openai_client = OpenAI(api_key=OPENAI_KEY)
-hf_client = Client("burak12321/burak-gpt-image")
+# ---------- HEADER ----------
+col1, col2, col3 = st.columns([6,2,2])
 
-# ---------------- TOP BAR ----------------
-top_l, top_r = st.columns([9,1])
-with top_r:
-    if st.session_state.logged_in:
-        if st.button("👤"):
-            st.session_state.show_profile = True
-    else:
-        if st.button("Giriş Yap"):
+with col1:
+    st.markdown("## 🤖 **Burak GPT Image**")
+
+with col2:
+    if st.session_state.user is None:
+        if st.button("Giriş Yap", key="open_login"):
             st.session_state.show_login = True
-        if st.button("Kayıt Ol"):
+            st.session_state.show_register = False
+    else:
+        st.markdown("")
+
+with col3:
+    if st.session_state.user is None:
+        if st.button("Kayıt Ol", key="open_register"):
             st.session_state.show_register = True
+            st.session_state.show_login = False
+    else:
+        with st.popover("👤 Profil"):
+            st.write("**Ad:**", st.session_state.user["name"])
+            st.write("**Email:**", st.session_state.user["email"])
+            if st.button("Çıkış Yap", key="logout"):
+                st.session_state.user = None
+                st.rerun()
 
-# ---------------- SIDEBAR ----------------
-with st.sidebar:
-    st.title("⚙️ Menü")
-    mode = st.radio("Mod Seç", ["💬 Sohbet", "🔍 Araştırma", "🎨 Görsel Üretim"])
-    st.markdown("---")
-    if st.button("🌙 / ☀️ Tema Değiştir"):
-        st.session_state.theme = "light" if st.session_state.theme == "dark" else "dark"
-        st.rerun()
-    st.markdown("**Burak GPT**")
 
-# ---------------- POPUPS ----------------
+st.divider()
+
+# ---------- LOGIN POPUP ----------
 if st.session_state.show_login:
-    st.markdown("### 🔐 Giriş Yap")
-    email = st.text_input("Email", key="login_email")
-    password = st.text_input("Şifre", type="password", key="login_pass")
+    st.subheader("🔐 Giriş Yap")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Giriş"):
+    with st.form("login_form"):
+        email = st.text_input("Email")
+        password = st.text_input("Şifre", type="password")
+        submit = st.form_submit_button("Giriş Yap")
+
+        if submit:
             if email and password:
-                st.session_state.logged_in = True
-                st.session_state.user = {"email": email, "name": "Kullanıcı"}
+                st.session_state.user = {
+                    "name": "Kullanıcı",
+                    "email": email
+                }
                 st.session_state.show_login = False
+                st.success("Giriş başarılı ✅")
                 st.rerun()
             else:
-                st.error("Bilgiler eksik")
-    with col2:
-        if st.button("İptal"):
-            st.session_state.show_login = False
-            st.rerun()
-if st.session_state.show_register:
-    st.markdown("### 📝 Kayıt Ol")
-    name = st.text_input("Ad *")
-    surname = st.text_input("Soyad (isteğe bağlı)")
-    email = st.text_input("Email", key="reg_email")
-    password = st.text_input("Şifre", type="password", key="reg_pass")
+                st.error("Email ve şifre zorunlu")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Kayıt Ol"):
-            if not name or not email or not password:
-                st.error("Zorunlu alanlar boş")
-            else:
-                st.session_state.logged_in = True
+# ---------- REGISTER POPUP ----------
+if st.session_state.show_register:
+    st.subheader("📝 Kayıt Ol")
+
+    with st.form("register_form"):
+        name = st.text_input("Ad *")
+        surname = st.text_input("Soyad (isteğe bağlı)")
+        email = st.text_input("Email")
+        password = st.text_input("Şifre", type="password")
+        submit = st.form_submit_button("Kayıt Ol")
+
+        if submit:
+            if name and email and password:
                 st.session_state.user = {
-                    "email": email,
-                    "name": f"{name} {surname}"
+                    "name": f"{name} {surname}".strip(),
+                    "email": email
                 }
                 st.session_state.show_register = False
+                st.success("Kayıt başarılı 🎉")
                 st.rerun()
+            else:
+                st.error("Ad, Email ve Şifre zorunlu")
 
-    with col2:
-        if st.button("İptal"):
-            st.session_state.show_register = False
-            st.rerun()
-if st.session_state.show_profile:
-    st.markdown("### 👤 Profil")
-    st.write("**Ad:**", st.session_state.user.get("name"))
-    st.write("**Email:**", st.session_state.user.get("email"))
 
-    if st.button("Çıkış Yap"):
-        st.session_state.logged_in = False
-        st.session_state.user = {}
-        st.session_state.show_profile = False
-        st.rerun()
-# ---------------- MAIN ----------------
-st.title("🤖 Burak GPT")
-st.caption("Sohbet • Araştırma • Görsel Üretim")
+# ---------- MAIN ----------
+st.markdown("### 🎨 Görsel Oluştur")
 
-# ---------------- CHAT ----------------
-if mode == "💬 Sohbet":
-    for m in st.session_state.messages:
-        css = "chat-user" if m["role"] == "user" else "chat-bot"
-        st.markdown(f"<div class='{css}'>{m['content']}</div>", unsafe_allow_html=True)
-
-    msg = st.text_input("Bir şey yaz")
-    if st.button("Gönder") and msg:
-        st.session_state.messages.append({"role":"user","content":msg})
-        res = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=st.session_state.messages
-        )
-        st.session_state.messages.append({
-            "role":"assistant",
-            "content":res.choices[0].message.content
-        })
-        st.rerun()
-
-# ---------------- RESEARCH ----------------
-elif mode == "🔍 Araştırma":
-    q = st.text_input("Araştırma konusu")
-    if st.button("Araştır"):
-        with st.spinner("Araştırılıyor..."):
-            res = openai_client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role":"user","content":f"Araştır: {q}"}]
-            )
-            st.write(res.choices[0].message.content)
-
-# ---------------- IMAGE ----------------
+if st.session_state.user is None:
+    st.info("Hesapsız 1–2 görsel oluşturabilirsin. Sınırsız için giriş yap.")
 else:
-    prompt = st.text_input("Görsel açıklaması yaz")
-    if st.button("Görsel Oluştur") and prompt:
-        progress = st.progress(0)
-        progress.progress(30, "Hazırlanıyor...")
-        time.sleep(0.3)
-        image = hf_client.predict(prompt)
-        progress.progress(100, "Tamamlandı")
-        st.image(image, width=320)
+    st.success("Sınırsız kullanım aktif 🚀")
+
+prompt = st.text_input("Prompt gir")
+
+if st.button("Görsel Oluştur", key="generate_image"):
+    if prompt:
+        st.image("https://placehold.co/512x512", caption="Örnek çıktı")
+    else:
+        st.warning("Prompt gir kral 😄")
