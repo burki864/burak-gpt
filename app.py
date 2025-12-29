@@ -11,25 +11,25 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------------- GLOBAL DARK CSS ----------------
+# ---------------- GLOBAL DARK CSS (FULL WHITE TEXT) ----------------
 st.markdown("""
 <style>
-/* Genel arka plan */
 .stApp {
     background-color: #0e0e0e;
-    color: #ffffff;
+    color: #ffffff !important;
 }
 
-/* Yazı input */
+* {
+    color: #ffffff !important;
+}
+
 input, textarea {
     background-color: #1e1e1e !important;
     color: #ffffff !important;
 }
 
-/* Chat balonları */
 .chat-user {
     background: #1c1c1c;
-    color: white;
     padding: 12px;
     border-radius: 10px;
     margin-bottom: 8px;
@@ -37,16 +37,23 @@ input, textarea {
 
 .chat-bot {
     background: #2a2a2a;
-    color: white;
     padding: 12px;
     border-radius: 10px;
     margin-bottom: 12px;
 }
 
-/* Sidebar */
 section[data-testid="stSidebar"] {
     background-color: #141414;
-    color: white;
+}
+
+button {
+    background-color: #2a2a2a !important;
+    color: white !important;
+    border-radius: 8px !important;
+}
+
+label, p, span, div {
+    color: white !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -54,33 +61,31 @@ section[data-testid="stSidebar"] {
 # ---------------- SECRETS ----------------
 OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
 HF_TOKEN = st.secrets["HF_TOKEN"]
-
 os.environ["HF_TOKEN"] = HF_TOKEN
 
 # ---------------- CLIENTS ----------------
 openai_client = OpenAI(api_key=OPENAI_KEY)
-
 hf_client = Client("burak12321/burak-gpt-image")
 
-# ---------------- SIDEBAR MENU ----------------
+# ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.title("⚙️ Menü")
     mode = st.radio(
         "Mod Seç",
-        ["💬 Sohbet", "🎨 Görsel Üretim"]
+        ["💬 Sohbet", "📚 Araştırma", "🎨 Görsel Üretim"]
     )
     st.markdown("---")
-    st.markdown("**Burak GPT**\n\nDark Mode • HF • OpenAI")
+    st.markdown("**Burak GPT**  \nDark Mode • HF • OpenAI")
 
 # ---------------- SESSION ----------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# ---------------- MAIN UI ----------------
+# ---------------- MAIN ----------------
 st.title("🤖 Burak GPT")
-st.caption("Sohbet + Görsel Üretim")
+st.caption("Sohbet • Araştırma • Görsel Üretim")
 
-# ---------------- CHAT HISTORY ----------------
+# ===================== CHAT MODE =====================
 if mode == "💬 Sohbet":
     for m in st.session_state.messages:
         if m["role"] == "user":
@@ -108,7 +113,33 @@ if mode == "💬 Sohbet":
         st.session_state.messages.append({"role": "assistant", "content": reply})
         st.rerun()
 
-# ---------------- IMAGE MODE ----------------
+# ===================== RESEARCH MODE =====================
+elif mode == "📚 Araştırma":
+    query = st.text_input("Araştırma konusu yaz")
+
+    if st.button("Araştır"):
+        with st.spinner("Araştırılıyor..."):
+            response = openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Detaylı, maddeli, öğretici ve net araştırma yap."
+                    },
+                    {
+                        "role": "user",
+                        "content": query
+                    }
+                ]
+            )
+
+            result = response.choices[0].message.content
+            st.markdown(
+                f"<div class='chat-bot'><b>Araştırma Sonucu:</b><br>{result}</div>",
+                unsafe_allow_html=True
+            )
+
+# ===================== IMAGE MODE =====================
 else:
     prompt = st.text_input("Görsel açıklaması yaz")
 
@@ -116,17 +147,14 @@ else:
         progress = st.progress(0, text="Görsel hazırlanıyor...")
 
         try:
-            progress.progress(15, text="Model yükleniyor...")
+            progress.progress(20, text="Model yükleniyor...")
             time.sleep(0.3)
 
-            progress.progress(35, text="GPU hazırlanıyor...")
+            progress.progress(45, text="Hugging Face çalışıyor...")
             time.sleep(0.3)
 
-            progress.progress(60, text="Görsel oluşturuluyor...")
+            progress.progress(70, text="Görsel oluşturuluyor...")
             image = hf_client.predict(prompt)
-
-            progress.progress(90, text="Son dokunuşlar...")
-            time.sleep(0.2)
 
             progress.progress(100, text="Tamamlandı ✔️")
             st.image(image, width=320)
