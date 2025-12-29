@@ -1,6 +1,3 @@
-import streamlit_authenticator as stauth
-import yaml
-from yaml.loader import SafeLoader
 import streamlit as st
 import os
 import time
@@ -93,7 +90,10 @@ with st.sidebar:
 
         if st.button("Giriş Yap"):
             st.session_state.logged_in = True
-            st.session_state.user = {"email": email, "name": "Burak"}
+            st.session_state.user = {
+                "email": email,
+                "name": "Kullanıcı"
+            }
             st.success("Giriş başarılı")
             st.rerun()
 
@@ -127,6 +127,11 @@ if "messages" not in st.session_state:
 
 # ---------------- MAIN ----------------
 st.title("🤖 Burak GPT")
+
+# 🔒 KİLİT — GİRİŞ YOKSA DUR
+if not st.session_state.logged_in:
+    st.warning("🔒 Devam etmek için giriş yapman gerekiyor")
+    st.stop()
 
 # ---------------- CHAT ----------------
 if mode == "💬 Sohbet":
@@ -176,7 +181,7 @@ elif mode == "🎨 Görsel Üretim":
 else:
     query = st.text_input("Araştırma konusu yaz")
 
-    if st.button("Araştır"):
+    if st.button("Araştır") and query:
         response = openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": f"Araştır: {query}"}]
