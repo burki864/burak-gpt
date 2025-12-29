@@ -1,7 +1,4 @@
-streamlit
-openai
+streamlit==1.36.0
+openai>=1.30.0
 requests
-gradio-client
-huggingface-hub
 pillow
-streamlit-authenticator
