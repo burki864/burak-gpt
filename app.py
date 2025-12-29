@@ -11,50 +11,62 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------------- GLOBAL DARK CSS (FULL WHITE TEXT) ----------------
-st.markdown("""
+# ---------------- SESSION ----------------
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if "guest_images" not in st.session_state:
+    st.session_state.guest_images = 0
+
+if "theme" not in st.session_state:
+    st.session_state.theme = "dark"
+
+# ---------------- THEME ----------------
+if st.session_state.theme == "dark":
+    bg = "#0e0e0e"
+    fg = "#ffffff"
+    card = "#1e1e1e"
+else:
+    bg = "#f5f5f5"
+    fg = "#000000"
+    card = "#ffffff"
+
+# ---------------- GLOBAL CSS ----------------
+st.markdown(f"""
 <style>
-.stApp {
-    background-color: #0e0e0e;
-    color: #ffffff !important;
-}
+.stApp {{
+    background-color: {bg};
+    color: {fg};
+}}
 
-* {
-    color: #ffffff !important;
-}
+input, textarea {{
+    background-color: {card} !important;
+    color: {fg} !important;
+}}
 
-input, textarea {
-    background-color: #1e1e1e !important;
-    color: #ffffff !important;
-}
-
-.chat-user {
+.chat-user {{
     background: #1c1c1c;
+    color: white;
     padding: 12px;
     border-radius: 10px;
     margin-bottom: 8px;
-}
+}}
 
-.chat-bot {
+.chat-bot {{
     background: #2a2a2a;
+    color: white;
     padding: 12px;
     border-radius: 10px;
     margin-bottom: 12px;
-}
+}}
 
-section[data-testid="stSidebar"] {
+section[data-testid="stSidebar"] {{
     background-color: #141414;
-}
-
-button {
-    background-color: #2a2a2a !important;
-    color: white !important;
-    border-radius: 8px !important;
-}
-
-label, p, span, div {
-    color: white !important;
-}
+    color: white;
+}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -70,22 +82,52 @@ hf_client = Client("burak12321/burak-gpt-image")
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.title("⚙️ Menü")
+
+    if st.button("🌗 Dark / Light"):
+        st.session_state.theme = "light" if st.session_state.theme == "dark" else "dark"
+        st.rerun()
+
     mode = st.radio(
         "Mod Seç",
-        ["💬 Sohbet", "📚 Araştırma", "🎨 Görsel Üretim"]
+        ["💬 Sohbet", "🔍 Araştırma", "🎨 Görsel Üretim"]
     )
-    st.markdown("---")
-    st.markdown("**Burak GPT**  \nDark Mode • HF • OpenAI")
 
-# ---------------- SESSION ----------------
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+    st.markdown("---")
+
+    if not st.session_state.logged_in:
+        st.subheader("🔐 Giriş / Kayıt")
+
+        name = st.text_input("Ad (zorunlu)")
+        surname = st.text_input("Soyad (isteğe bağlı)")
+        email = st.text_input("Email")
+        password = st.text_input("Şifre", type="password")
+
+        if st.button("Giriş Yap / Kayıt Ol"):
+            if not name:
+                st.error("Ad zorunlu")
+            elif not email or not password:
+                st.error("Email ve şifre gerekli")
+            else:
+                st.session_state.logged_in = True
+                st.success(f"Hoş geldin {name} 👋")
+                st.rerun()
+
+        st.caption("Hesapsız kullanım: 2 görsel")
+
+    else:
+        st.success("Giriş yapıldı ✔️")
+        if st.button("Çıkış Yap"):
+            st.session_state.logged_in = False
+            st.rerun()
+
+    st.markdown("---")
+    st.markdown("**Burak GPT**\n\nDark Mode • HF • OpenAI")
 
 # ---------------- MAIN ----------------
 st.title("🤖 Burak GPT")
 st.caption("Sohbet • Araştırma • Görsel Üretim")
 
-# ===================== CHAT MODE =====================
+# ---------------- CHAT ----------------
 if mode == "💬 Sohbet":
     for m in st.session_state.messages:
         if m["role"] == "user":
@@ -113,51 +155,48 @@ if mode == "💬 Sohbet":
         st.session_state.messages.append({"role": "assistant", "content": reply})
         st.rerun()
 
-# ===================== RESEARCH MODE =====================
-elif mode == "📚 Araştırma":
+# ---------------- RESEARCH ----------------
+elif mode == "🔍 Araştırma":
     query = st.text_input("Araştırma konusu yaz")
 
     if st.button("Araştır"):
-        with st.spinner("Araştırılıyor..."):
+        with st.spinner("Bilgi toplanıyor..."):
             response = openai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {
-                        "role": "system",
-                        "content": "Detaylı, maddeli, öğretici ve net araştırma yap."
-                    },
-                    {
-                        "role": "user",
-                        "content": query
-                    }
+                    {"role": "system", "content": "Detaylı ve anlaşılır araştırma yap"},
+                    {"role": "user", "content": query}
                 ]
             )
+            st.markdown(response.choices[0].message.content)
 
-            result = response.choices[0].message.content
-            st.markdown(
-                f"<div class='chat-bot'><b>Araştırma Sonucu:</b><br>{result}</div>",
-                unsafe_allow_html=True
-            )
-
-# ===================== IMAGE MODE =====================
+# ---------------- IMAGE ----------------
 else:
     prompt = st.text_input("Görsel açıklaması yaz")
 
     if st.button("Görsel Oluştur") and prompt:
+
+        if not st.session_state.logged_in and st.session_state.guest_images >= 2:
+            st.warning("Sınırsız görsel için giriş yap 🔐")
+            st.stop()
+
         progress = st.progress(0, text="Görsel hazırlanıyor...")
 
         try:
-            progress.progress(20, text="Model yükleniyor...")
+            progress.progress(20, "Model yükleniyor...")
             time.sleep(0.3)
 
-            progress.progress(45, text="Hugging Face çalışıyor...")
-            time.sleep(0.3)
-
-            progress.progress(70, text="Görsel oluşturuluyor...")
+            progress.progress(50, "Görsel oluşturuluyor...")
             image = hf_client.predict(prompt)
 
-            progress.progress(100, text="Tamamlandı ✔️")
+            progress.progress(90, "Son dokunuşlar...")
+            time.sleep(0.2)
+
+            progress.progress(100, "Tamamlandı ✔️")
             st.image(image, width=320)
+
+            if not st.session_state.logged_in:
+                st.session_state.guest_images += 1
 
         except Exception as e:
             st.error(f"Hata: {e}")
