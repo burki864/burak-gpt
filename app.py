@@ -1,12 +1,11 @@
 import streamlit as st
-import requests
 import json
 import os
 from datetime import datetime
 from io import BytesIO
 from PIL import Image
 from openai import OpenAI
-import base64
+from gradio_client import Client
 
 # ---------------- PAGE ----------------
 st.set_page_config(
@@ -60,15 +59,12 @@ if st.session_state.user_name is None:
             }
         else:
             user = data["users"][username]
-
             if user.get("banned"):
                 st.error("🚫 Hesabınız banlanmıştır.")
                 st.stop()
-
             if not user.get("active", True):
                 st.error("❌ Hesabınız kapatılmıştır.")
                 st.stop()
-
             user["visits"] += 1
             user["last_seen"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -77,19 +73,6 @@ if st.session_state.user_name is None:
         st.rerun()
 
     st.stop()
-
-# ---------------- USER CHECK ----------------
-data = load_users()
-current_user = data["users"].get(st.session_state.user_name)
-
-if current_user:
-    if current_user.get("banned"):
-        st.error("🚫 Hesabınız banlanmıştır.")
-        st.stop()
-
-    if not current_user.get("active", True):
-        st.error("❌ Hesabınız kapatılmıştır.")
-        st.stop()
 
 # ---------------- THEME ----------------
 if "theme" not in st.session_state:
@@ -104,7 +87,7 @@ st.markdown(f"""
     background-color: {"#0e0e0e" if dark else "#ffffff"};
     color: {"#ffffff" if dark else "#000000"};
 }}
-input, textarea {{
+input {{
     background-color: {"#1e1e1e" if dark else "#f2f2f2"} !important;
     color: {"#ffffff" if dark else "#000000"} !important;
 }}
@@ -120,18 +103,14 @@ input, textarea {{
     border-radius: 10px;
     margin-bottom: 12px;
 }}
-section[data-testid="stSidebar"] {{
-    background-color: {"#141414" if dark else "#f5f5f5"};
-}}
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------- API KEYS ----------------
 OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
 HF_TOKEN = st.secrets["HF_TOKEN"]
-HF_SPACE_URL = st.secrets["HF_SPACE_URL"]
 
-client = OpenAI(api_key=OPENAI_KEY)
+client_openai = OpenAI(api_key=OPENAI_KEY)
 
 # ---------------- PROMPT FIX ----------------
 def fix_prompt_tr(user_prompt: str) -> str:
@@ -143,36 +122,35 @@ Subject:
 
 Style:
 realistic photography, natural proportions, correct perspective,
-cinematic lighting, sharp focus, DSLR photo, natural colors,
-professional composition, detailed textures.
+cinematic lighting, sharp focus, DSLR photo, natural colors.
 
 Negative prompt:
 fantasy, surreal, abstract, cartoon, anime, illustration,
-distorted, deformed, extra limbs, extra objects, floating,
-unrealistic colors, low quality, blurry, watermark, text
+distorted, deformed, extra limbs, floating objects,
+low quality, blurry, watermark, text
 """
 
-# ---------------- IMAGE (HF SPACE) ----------------
+# ---------------- IMAGE (HF SPACE - DOĞRU YOL) ----------------
 def generate_image(prompt):
     try:
-        response = requests.post(
-            f"{HF_SPACE_URL}/run/predict",
-            headers={
-                "Authorization": f"Bearer {HF_TOKEN}",
-                "Content-Type": "application/json"
-            },
-            json={"data": [prompt]},
-            timeout=180
+        client = Client(
+            "burak12321/burak-gpt-image",
+            hf_token=HF_TOKEN
         )
 
-        if response.status_code != 200:
-            st.error(f"HF hata: {response.status_code}")
-            return None
+        result = client.predict(
+            prompt=prompt,
+            api_name="/predict"
+        )
 
-        result = response.json()
-        image_base64 = result["data"][0].split(",")[1]
-        image_bytes = base64.b64decode(image_base64)
-        return Image.open(BytesIO(image_bytes))
+        if isinstance(result, str):
+            return Image.open(result)
+
+        if isinstance(result, Image.Image):
+            return result
+
+        st.error("Görsel formatı tanınmadı")
+        return None
 
     except Exception as e:
         st.error(f"Görsel hata: {e}")
@@ -199,7 +177,7 @@ if "messages" not in st.session_state:
 
 # ---------------- MAIN ----------------
 st.title("🤖 Burak GPT")
-st.caption("Basit Türkçe → Gerçekçi Görsel")
+st.caption("Basit Türkçe → Düzgün Gerçekçi Görsel")
 
 # ---------------- CHAT ----------------
 if mode == "💬 Sohbet":
@@ -215,7 +193,7 @@ if mode == "💬 Sohbet":
 
     if st.button("Gönder") and user_input:
         st.session_state.messages.append({"role": "user", "content": user_input})
-        response = client.responses.create(
+        response = client_openai.responses.create(
             model="gpt-4.1-mini",
             input=st.session_state.messages
         )
@@ -229,10 +207,10 @@ elif mode == "🎨 Görsel Üretim":
     prompt = st.text_input("Görseli basitçe anlat (Türkçe)")
 
     if st.button("Görsel Oluştur") and prompt:
-        fixed = fix_prompt_tr(prompt)
-        image = generate_image(fixed)
+        fixed_prompt = fix_prompt_tr(prompt)
+        image = generate_image(fixed_prompt)
         if image:
-            st.image(image, width=400)
+            st.image(image, width=420)
         else:
             st.info("ℹ️ Görsel üretilemedi")
 
@@ -240,7 +218,7 @@ elif mode == "🎨 Görsel Üretim":
 else:
     query = st.text_input("Araştırma konusu yaz")
     if st.button("Araştır") and query:
-        response = client.responses.create(
+        response = client_openai.responses.create(
             model="gpt-4.1-mini",
             input=f"Araştır: {query}"
         )
