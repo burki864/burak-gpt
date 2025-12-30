@@ -1,26 +1,23 @@
 import streamlit as st
-import requests
 import json
 import os
+import uuid
 from datetime import datetime
-from io import BytesIO
-from PIL import Image
 from openai import OpenAI
 
 # ---------------- PAGE ----------------
 st.set_page_config(
     page_title="Burak GPT",
     page_icon="🤖",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# ---------------- USER DATA ----------------
+# ---------------- FILE ----------------
 USER_FILE = "user_data.json"
 
 if not os.path.exists(USER_FILE):
     with open(USER_FILE, "w") as f:
-        json.dump({"counter": 0, "users": {}}, f)
+        json.dump({"users": {}}, f)
 
 def load_users():
     with open(USER_FILE, "r") as f:
@@ -30,195 +27,88 @@ def save_users(data):
     with open(USER_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
-if "user_name" not in st.session_state:
-    st.session_state.user_name = None
+# ---------------- VISITOR ID (KAÇIŞ YOK) ----------------
+if "visitor_id" not in st.session_state:
+    st.session_state.visitor_id = str(uuid.uuid4())[:10]
+
+visitor_id = f"visitor_{st.session_state.visitor_id}"
+
+data = load_users()
+
+# ZİYARETÇİ DAHA ÖNCE YOKSA KAYDET
+if visitor_id not in data["users"]:
+    data["users"][visitor_id] = {
+        "name": "Ziyaretçi",
+        "visits": 1,
+        "last_seen": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "active": True,
+        "banned": False
+    }
+else:
+    data["users"][visitor_id]["visits"] += 1
+    data["users"][visitor_id]["last_seen"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+save_users(data)
+
+# ---------------- BAN KONTROL ----------------
+if not data["users"][visitor_id]["active"] or data["users"][visitor_id]["banned"]:
+    st.error("⛔ Hesabın kapatıldı")
+    st.stop()
 
 # ---------------- LOGIN ----------------
-if st.session_state.user_name is None:
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if not st.session_state.logged_in:
     st.title("👋 Hoş Geldin")
-    name_input = st.text_input("Adın nedir?")
+    name = st.text_input("İsmin (isteğe bağlı)")
 
-    col1, col2 = st.columns(2)
+    if st.button("Devam Et"):
+        if name.strip():
+            data = load_users()
+            data["users"][visitor_id]["name"] = name.strip()
+            save_users(data)
 
-    if col1.button("Devam Et") or col2.button("Bu adımı geç"):
-        data = load_users()
-
-        if name_input.strip() == "":
-            data["counter"] += 1
-            username = f"user{data['counter']}"
-        else:
-            username = name_input.strip()
-
-        if username not in data["users"]:
-            data["users"][username] = {
-                "name": username,
-                "visits": 1,
-                "last_seen": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "active": True,
-                "banned": False
-            }
-        else:
-            user = data["users"][username]
-
-            if user.get("banned"):
-                st.error("🚫 Hesabınız banlanmıştır.")
-                st.stop()
-
-            if not user.get("active", True):
-                st.error("❌ Hesabınız kapatılmıştır.")
-                st.stop()
-
-            user["visits"] += 1
-            user["last_seen"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        save_users(data)
-        st.session_state.user_name = username
+        st.session_state.logged_in = True
         st.rerun()
 
     st.stop()
 
-# ---------------- USER CHECK (SENKRON) ----------------
-data = load_users()
-current_user = data["users"].get(st.session_state.user_name)
-
-if current_user:
-    if current_user.get("banned"):
-        st.error("🚫 Hesabınız banlanmıştır.")
-        st.stop()
-
-    if not current_user.get("active", True):
-        st.error("❌ Hesabınız kapatılmıştır.")
-        st.stop()
-
-# ---------------- THEME ----------------
-if "theme" not in st.session_state:
-    st.session_state.theme = "dark"
-
-dark = st.session_state.theme == "dark"
-
-# ---------------- CSS ----------------
-st.markdown(f"""
-<style>
-.stApp {{
-    background-color: {"#0e0e0e" if dark else "#ffffff"};
-    color: {"#ffffff" if dark else "#000000"};
-}}
-input, textarea {{
-    background-color: {"#1e1e1e" if dark else "#f2f2f2"} !important;
-    color: {"#ffffff" if dark else "#000000"} !important;
-}}
-.chat-user {{
-    background: {"#1c1c1c" if dark else "#eaeaea"};
-    padding: 12px;
-    border-radius: 10px;
-    margin-bottom: 8px;
-}}
-.chat-bot {{
-    background: {"#2a2a2a" if dark else "#dcdcdc"};
-    padding: 12px;
-    border-radius: 10px;
-    margin-bottom: 12px;
-}}
-section[data-testid="stSidebar"] {{
-    background-color: {"#141414" if dark else "#f5f5f5"};
-}}
-</style>
-""", unsafe_allow_html=True)
-
-# ---------------- API ----------------
-OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
-HF_TOKEN = st.secrets["HF_TOKEN"]
-
-client = OpenAI(api_key=OPENAI_KEY)
-
-# ---------------- IMAGE API ----------------
-HF_API_URL = "https://router.huggingface.co/models/runwayml/stable-diffusion-v1-5"
-HF_HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"}
-
-def generate_image(prompt):
-    try:
-        response = requests.post(
-            HF_API_URL,
-            headers=HF_HEADERS,
-            json={"inputs": prompt},
-            timeout=120
-        )
-
-        if response.status_code != 200:
-            return None
-
-        if "image" in response.headers.get("content-type", ""):
-            return Image.open(BytesIO(response.content))
-
-        return None
-    except:
-        return None
-
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
-    st.title("⚙️ Menü")
-    st.markdown(f"👤 **{st.session_state.user_name}**")
+    st.markdown(f"👤 **{data['users'][visitor_id]['name']}**")
+    st.markdown(f"🆔 `{visitor_id}`")
 
-    if st.button("🚪 Çıkış Yap"):
-        st.session_state.user_name = None
+    if st.button("🚪 Çıkış"):
+        st.session_state.logged_in = False
         st.rerun()
-
-    if st.button("🌙 / ☀️ Tema Değiştir"):
-        st.session_state.theme = "light" if dark else "dark"
-        st.rerun()
-
-    mode = st.radio("Mod Seç", ["💬 Sohbet", "🎨 Görsel Üretim", "🔍 Araştırma"])
-
-# ---------------- SESSION ----------------
-if "messages" not in st.session_state:
-    st.session_state.messages = []
 
 # ---------------- MAIN ----------------
 st.title("🤖 Burak GPT")
-st.caption("Hızlı • Stabil • Admin Senkronlu")
+st.caption("Kaçışsız • Admin kontrollü • Stabil")
 
 # ---------------- CHAT ----------------
-if mode == "💬 Sohbet":
-    for m in st.session_state.messages:
-        cls = "chat-user" if m["role"] == "user" else "chat-bot"
-        name = "Sen" if m["role"] == "user" else "Burak GPT"
-        st.markdown(
-            f"<div class='{cls}'><b>{name}:</b> {m['content']}</div>",
-            unsafe_allow_html=True
-        )
+OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
+client = OpenAI(api_key=OPENAI_KEY)
 
-    user_input = st.text_input("Mesaj yaz...")
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-    if st.button("Gönder") and user_input:
-        st.session_state.messages.append({"role": "user", "content": user_input})
+for m in st.session_state.messages:
+    who = "Sen" if m["role"] == "user" else "Burak GPT"
+    st.markdown(f"**{who}:** {m['content']}")
 
-        response = client.responses.create(
-            model="gpt-4.1-mini",
-            input=st.session_state.messages
-        )
+msg = st.text_input("Mesaj yaz")
 
-        st.session_state.messages.append(
-            {"role": "assistant", "content": response.output_text}
-        )
-        st.rerun()
+if st.button("Gönder") and msg:
+    st.session_state.messages.append({"role": "user", "content": msg})
 
-# ---------------- IMAGE ----------------
-elif mode == "🎨 Görsel Üretim":
-    prompt = st.text_input("Görsel açıklaması yaz")
+    res = client.responses.create(
+        model="gpt-4.1-mini",
+        input=st.session_state.messages
+    )
 
-    if st.button("Görsel Oluştur") and prompt:
-        image = generate_image(prompt)
-        if image:
-            st.image(image, width=350)
-        else:
-            st.info("ℹ️ Görsel üretilemedi")
-
-# ---------------- RESEARCH ----------------
-else:
-    query = st.text_input("Araştırma konusu yaz")
-    if st.button("Araştır") and query:
-        response = client.responses.create(
-            model="gpt-4.1-mini",
-            input=f"Araştır: {query}"
-        )
-        st.markdown(response.output_text)
+    st.session_state.messages.append(
+        {"role": "assistant", "content": res.output_text}
+    )
+    st.rerun()
