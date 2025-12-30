@@ -134,21 +134,27 @@ client = OpenAI(api_key=OPENAI_KEY)
 
 # ---------------- IMAGE API (Z-IMAGE TURBO) ----------------
 # ---------------- IMAGE API ----------------
+import base64
+
+# ---------------- IMAGE API ----------------
 Z_IMAGE_API = st.secrets["Z_IMAGE_API"]
 
 def generate_image(prompt):
     try:
-        # Gradio API payload
         payload = {
             "data": [
-                prompt
+                prompt,   # prompt
+                1024,     # width
+                1024,     # height
+                20,       # steps
+                7.5       # guidance scale
             ]
         }
 
         response = requests.post(
             Z_IMAGE_API,
             json=payload,
-            timeout=120
+            timeout=180
         )
 
         if response.status_code != 200:
@@ -157,10 +163,10 @@ def generate_image(prompt):
 
         result = response.json()
 
-        # Base64 image comes back in "data" list
-        image_base64 = result["data"][0].split(",")[-1]
-
+        # base64 image
+        image_base64 = result["data"][0].split(",")[1]
         image_bytes = base64.b64decode(image_base64)
+
         return Image.open(BytesIO(image_bytes))
 
     except Exception as e:
