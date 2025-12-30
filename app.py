@@ -131,9 +131,6 @@ OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
 Z_IMAGE_API = st.secrets["Z_IMAGE_API"]
 
 client = OpenAI(api_key=OPENAI_KEY)
-
-# ---------------- IMAGE API (Z-IMAGE TURBO) ----------------
-# ---------------- IMAGE API ----------------
 import base64
 
 # ---------------- IMAGE API ----------------
