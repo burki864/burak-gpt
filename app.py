@@ -132,7 +132,7 @@ HF_TOKEN = st.secrets["HF_TOKEN"]
 client = OpenAI(api_key=OPENAI_KEY)
 
 # ---------------- IMAGE API ----------------
-HF_API_URL = "https://router.huggingface.co/models/runwayml/stable-diffusion-v1-5"
+HF_API_URL = "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5"
 HF_HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"}
 
 def generate_image(prompt):
