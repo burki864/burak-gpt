@@ -141,7 +141,7 @@ elif mode == "🎨 Görsel Üretim":
         progress = st.progress(0, "Hazırlanıyor...")
         time.sleep(0.3)
 
-        progress.progress(50, "Görsel üretiliyor")
+        progress.progress(50, "Görsel üretiliyor Bu Bir Kaç Dakika Sürebilir")
         image = generate_image(prompt)
 
         progress.progress(100, "Tamamlandı ✔")
