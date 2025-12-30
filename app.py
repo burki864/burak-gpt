@@ -130,7 +130,6 @@ if mode == "💬 Sohbet":
             {"role": "assistant", "content": reply}
         )
         st.rerun()
-
 # ---------------- IMAGE ----------------
 elif mode == "🎨 Görsel Üretim":
     prompt = st.text_input(
@@ -151,7 +150,6 @@ elif mode == "🎨 Görsel Üretim":
             st.image(image, width=350)
         else:
             st.info("ℹ️ Bir sorun oluştu, tekrar deneyebilirsin")
-
 # ---------------- RESEARCH ----------------
 else:
     query = st.text_input("Araştırma konusu yaz")
