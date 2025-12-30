@@ -1,5 +1,4 @@
 import streamlit as st
-import time
 import requests
 import json
 import os
@@ -34,14 +33,14 @@ def save_users(data):
 if "user_name" not in st.session_state:
     st.session_state.user_name = None
 
-# ---------------- LOGIN SCREEN ----------------
+# ---------------- LOGIN ----------------
 if st.session_state.user_name is None:
     st.title("👋 Hoş Geldin")
     name_input = st.text_input("Adın nedir?")
 
     col1, col2 = st.columns(2)
 
-    if col1.button("Devam Et"):
+    if col1.button("Devam Et") or col2.button("Bu adımı geç"):
         data = load_users()
 
         if name_input.strip() == "":
@@ -52,26 +51,25 @@ if st.session_state.user_name is None:
 
         if username not in data["users"]:
             data["users"][username] = {
+                "name": username,
                 "visits": 1,
-                "last_seen": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                "last_seen": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "active": True,
+                "banned": False
             }
         else:
-            data["users"][username]["visits"] += 1
-            data["users"][username]["last_seen"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            user = data["users"][username]
 
-        save_users(data)
-        st.session_state.user_name = username
-        st.rerun()
+            if user.get("banned"):
+                st.error("🚫 Hesabınız banlanmıştır.")
+                st.stop()
 
-    if col2.button("Bu adımı geç"):
-        data = load_users()
-        data["counter"] += 1
-        username = f"user{data['counter']}"
+            if not user.get("active", True):
+                st.error("❌ Hesabınız kapatılmıştır.")
+                st.stop()
 
-        data["users"][username] = {
-            "visits": 1,
-            "last_seen": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
+            user["visits"] += 1
+            user["last_seen"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         save_users(data)
         st.session_state.user_name = username
@@ -79,13 +77,26 @@ if st.session_state.user_name is None:
 
     st.stop()
 
-# ---------------- THEME STATE ----------------
+# ---------------- USER CHECK (SENKRON) ----------------
+data = load_users()
+current_user = data["users"].get(st.session_state.user_name)
+
+if current_user:
+    if current_user.get("banned"):
+        st.error("🚫 Hesabınız banlanmıştır.")
+        st.stop()
+
+    if not current_user.get("active", True):
+        st.error("❌ Hesabınız kapatılmıştır.")
+        st.stop()
+
+# ---------------- THEME ----------------
 if "theme" not in st.session_state:
     st.session_state.theme = "dark"
 
 dark = st.session_state.theme == "dark"
 
-# ---------------- GLOBAL CSS ----------------
+# ---------------- CSS ----------------
 st.markdown(f"""
 <style>
 .stApp {{
@@ -114,13 +125,13 @@ section[data-testid="stSidebar"] {{
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- SECRETS ----------------
+# ---------------- API ----------------
 OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
 HF_TOKEN = st.secrets["HF_TOKEN"]
 
 client = OpenAI(api_key=OPENAI_KEY)
 
-# ---------------- HF IMAGE API ----------------
+# ---------------- IMAGE API ----------------
 HF_API_URL = "https://router.huggingface.co/models/runwayml/stable-diffusion-v1-5"
 HF_HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"}
 
@@ -133,30 +144,16 @@ def generate_image(prompt):
             timeout=120
         )
 
-        # HATA VARSA GÖSTER
         if response.status_code != 200:
-            st.error(f"HF Hatası: {response.text}")
             return None
 
-        content_type = response.headers.get("content-type", "")
-
-        # Direkt image geldiyse
-        if "image" in content_type:
+        if "image" in response.headers.get("content-type", ""):
             return Image.open(BytesIO(response.content))
 
-        # JSON geldiyse (base64 olabilir)
-        data = response.json()
-
-        if isinstance(data, dict) and "error" in data:
-            st.error(f"HF Error: {data['error']}")
-            return None
-
-        st.error("Bilinmeyen HF cevabı")
+        return None
+    except:
         return None
 
-    except Exception as e:
-        st.error(str(e))
-        return None
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.title("⚙️ Menü")
@@ -178,15 +175,15 @@ if "messages" not in st.session_state:
 
 # ---------------- MAIN ----------------
 st.title("🤖 Burak GPT")
-st.caption("Hızlı • Stabil • Güncel API")
+st.caption("Hızlı • Stabil • Admin Senkronlu")
 
 # ---------------- CHAT ----------------
 if mode == "💬 Sohbet":
     for m in st.session_state.messages:
-        role_class = "chat-user" if m["role"] == "user" else "chat-bot"
+        cls = "chat-user" if m["role"] == "user" else "chat-bot"
         name = "Sen" if m["role"] == "user" else "Burak GPT"
         st.markdown(
-            f"<div class='{role_class}'><b>{name}:</b> {m['content']}</div>",
+            f"<div class='{cls}'><b>{name}:</b> {m['content']}</div>",
             unsafe_allow_html=True
         )
 
