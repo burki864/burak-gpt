@@ -1,4 +1,5 @@
 {
+  "counter": 1,
   "users": {
     "user1": {
       "name": "Ali",
