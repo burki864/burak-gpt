@@ -125,7 +125,10 @@ if mode == "💬 Sohbet":
 
 # ---------------- IMAGE ----------------
 elif mode == "🎨 Görsel Üretim":
-    prompt = st.text_input("Görsel açıklaması yaz")
+    prompt = st.text_input(
+        "Görsel açıklaması yaz",
+        placeholder="ör: pastel tonlarda çiçekli kumaş deseni"
+    )
 
     if st.button("Görsel Oluştur") and prompt:
         progress = st.progress(0, "Hazırlanıyor...")
@@ -139,7 +142,7 @@ elif mode == "🎨 Görsel Üretim":
         if image is not None:
             st.image(image, width=350)
         else:
-            st.warning("⚠️ Görsel üretilemedi, tekrar dene")
+            st.info("ℹ️ Bir sorun oluştu, tekrar deneyebilirsin")
 
 # ---------------- RESEARCH ----------------
 else:
