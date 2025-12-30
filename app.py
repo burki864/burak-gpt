@@ -135,7 +135,11 @@ elif mode == "🎨 Görsel Üretim":
         image = generate_image(prompt)
 
         progress.progress(100, "Tamamlandı ✔")
-        st.image(image, width=350)
+
+        if image is not None:
+            st.image(image, width=350)
+        else:
+            st.warning("⚠️ Görsel üretilemedi, tekrar dene")
 
 # ---------------- RESEARCH ----------------
 else:
