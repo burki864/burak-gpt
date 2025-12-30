@@ -1,114 +1,95 @@
 import streamlit as st
-import json
-import os
-import uuid
+import json, os
 from datetime import datetime
-from openai import OpenAI
 
-# ---------------- PAGE ----------------
-st.set_page_config(
-    page_title="Burak GPT",
-    page_icon="🤖",
-    layout="wide"
-)
+st.set_page_config(page_title="Burak GPT", layout="wide")
 
-# ---------------- FILE ----------------
-USER_FILE = "user_data.json"
+# ---------- STATE GARANTİ ----------
+for key, val in {
+    "user_id": None,
+    "theme": "dark",
+    "mode": "💬 Sohbet",
+    "messages": []
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = val
 
-if not os.path.exists(USER_FILE):
-    with open(USER_FILE, "w") as f:
-        json.dump({"users": {}}, f)
+# ---------- USER DATA ----------
+USER_FILE = "users.json"
 
 def load_users():
-    with open(USER_FILE, "r") as f:
+    if not os.path.exists(USER_FILE):
+        return {"counter": 0, "users": {}}
+    with open(USER_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
 def save_users(data):
-    with open(USER_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    with open(USER_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
-# ---------------- VISITOR ID (KAÇIŞ YOK) ----------------
-if "visitor_id" not in st.session_state:
-    st.session_state.visitor_id = str(uuid.uuid4())[:10]
-
-visitor_id = f"visitor_{st.session_state.visitor_id}"
-
-data = load_users()
-
-# ZİYARETÇİ DAHA ÖNCE YOKSA KAYDET
-if visitor_id not in data["users"]:
-    data["users"][visitor_id] = {
-        "name": "Ziyaretçi",
-        "visits": 1,
-        "last_seen": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "active": True,
-        "banned": False
-    }
-else:
-    data["users"][visitor_id]["visits"] += 1
-    data["users"][visitor_id]["last_seen"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-save_users(data)
-
-# ---------------- BAN KONTROL ----------------
-if not data["users"][visitor_id]["active"] or data["users"][visitor_id]["banned"]:
-    st.error("⛔ Hesabın kapatıldı")
-    st.stop()
-
-# ---------------- LOGIN ----------------
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-
-if not st.session_state.logged_in:
+# ---------- LOGIN ----------
+if st.session_state.user_id is None:
     st.title("👋 Hoş Geldin")
-    name = st.text_input("İsmin (isteğe bağlı)")
+    name = st.text_input("Adın nedir?")
 
-    if st.button("Devam Et"):
-        if name.strip():
-            data = load_users()
-            data["users"][visitor_id]["name"] = name.strip()
-            save_users(data)
+    if st.button("Devam Et") or st.button("Bu adımı geç"):
+        data = load_users()
+        data["counter"] += 1
 
-        st.session_state.logged_in = True
+        uid = name.strip() if name.strip() else f"user{data['counter']}"
+
+        if uid not in data["users"]:
+            data["users"][uid] = {
+                "name": uid,
+                "created": datetime.now().isoformat(),
+                "last_seen": datetime.now().isoformat(),
+                "visits": 1,
+                "banned": False,
+                "active": True
+            }
+        else:
+            data["users"][uid]["visits"] += 1
+            data["users"][uid]["last_seen"] = datetime.now().isoformat()
+
+        save_users(data)
+        st.session_state.user_id = uid
         st.rerun()
 
     st.stop()
 
-# ---------------- SIDEBAR ----------------
-with st.sidebar:
-    st.markdown(f"👤 **{data['users'][visitor_id]['name']}**")
-    st.markdown(f"🆔 `{visitor_id}`")
+# ---------- BAN KONTROL ----------
+data = load_users()
+user = data["users"].get(st.session_state.user_id)
 
+if not user or user.get("banned") or not user.get("active"):
+    st.error("⛔ Hesabınız kapalı veya banlı.")
+    st.stop()
+
+# ---------- SIDEBAR ----------
+with st.sidebar:
+    st.markdown(f"👤 **{st.session_state.user_id}**")
+    st.session_state.mode = st.radio(
+        "Mod", ["💬 Sohbet", "🎨 Görsel Üretim", "🔍 Araştırma"]
+    )
     if st.button("🚪 Çıkış"):
-        st.session_state.logged_in = False
+        st.session_state.user_id = None
         st.rerun()
 
-# ---------------- MAIN ----------------
+# ---------- MAIN ----------
 st.title("🤖 Burak GPT")
-st.caption("Kaçışsız • Admin kontrollü • Stabil")
 
-# ---------------- CHAT ----------------
-OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
-client = OpenAI(api_key=OPENAI_KEY)
+if st.session_state.mode == "💬 Sohbet":
+    for m in st.session_state.messages:
+        st.write(f"**{m['role']}**: {m['content']}")
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+    msg = st.text_input("Mesaj yaz")
+    if st.button("Gönder") and msg:
+        st.session_state.messages.append({"role": "Sen", "content": msg})
+        st.session_state.messages.append({"role": "Burak GPT", "content": "Hazırım kral 😎"})
+        st.rerun()
 
-for m in st.session_state.messages:
-    who = "Sen" if m["role"] == "user" else "Burak GPT"
-    st.markdown(f"**{who}:** {m['content']}")
+elif st.session_state.mode == "🎨 Görsel Üretim":
+    st.info("🎨 Görsel üretim burada çalışır")
 
-msg = st.text_input("Mesaj yaz")
-
-if st.button("Gönder") and msg:
-    st.session_state.messages.append({"role": "user", "content": msg})
-
-    res = client.responses.create(
-        model="gpt-4.1-mini",
-        input=st.session_state.messages
-    )
-
-    st.session_state.messages.append(
-        {"role": "assistant", "content": res.output_text}
-    )
-    st.rerun()
+else:
+    st.info("🔍 Araştırma burada çalışır")
