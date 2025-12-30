@@ -8,14 +8,15 @@ from PIL import Image
 from openai import OpenAI
 import base64
 
-# ================= PAGE =================
+# ---------------- PAGE ----------------
 st.set_page_config(
     page_title="Burak GPT",
     page_icon="🤖",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# ================= USER DATA =================
+# ---------------- USER DATA ----------------
 USER_FILE = "user_data.json"
 
 if not os.path.exists(USER_FILE):
@@ -33,30 +34,43 @@ def save_users(data):
 if "user_name" not in st.session_state:
     st.session_state.user_name = None
 
-# ================= LOGIN =================
+# ---------------- LOGIN ----------------
 if st.session_state.user_name is None:
     st.title("👋 Hoş Geldin")
-    name = st.text_input("Adın nedir? (boş bırakabilirsin)")
+    name_input = st.text_input("Adın nedir?")
 
-    if st.button("Devam Et"):
+    col1, col2 = st.columns(2)
+
+    if col1.button("Devam Et") or col2.button("Bu adımı geç"):
         data = load_users()
 
-        if name.strip() == "":
+        if name_input.strip() == "":
             data["counter"] += 1
             username = f"user{data['counter']}"
         else:
-            username = name.strip()
+            username = name_input.strip()
 
         if username not in data["users"]:
             data["users"][username] = {
+                "name": username,
                 "visits": 1,
-                "last_seen": str(datetime.now()),
+                "last_seen": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "active": True,
                 "banned": False
             }
         else:
-            data["users"][username]["visits"] += 1
-            data["users"][username]["last_seen"] = str(datetime.now())
+            user = data["users"][username]
+
+            if user.get("banned"):
+                st.error("🚫 Hesabınız banlanmıştır.")
+                st.stop()
+
+            if not user.get("active", True):
+                st.error("❌ Hesabınız kapatılmıştır.")
+                st.stop()
+
+            user["visits"] += 1
+            user["last_seen"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         save_users(data)
         st.session_state.user_name = username
@@ -64,16 +78,30 @@ if st.session_state.user_name is None:
 
     st.stop()
 
-# ================= THEME =================
+# ---------------- USER CHECK ----------------
+data = load_users()
+current_user = data["users"].get(st.session_state.user_name)
+
+if current_user:
+    if current_user.get("banned"):
+        st.error("🚫 Hesabınız banlanmıştır.")
+        st.stop()
+
+    if not current_user.get("active", True):
+        st.error("❌ Hesabınız kapatılmıştır.")
+        st.stop()
+
+# ---------------- THEME ----------------
 if "theme" not in st.session_state:
     st.session_state.theme = "dark"
 
 dark = st.session_state.theme == "dark"
 
+# ---------------- CSS ----------------
 st.markdown(f"""
 <style>
 .stApp {{
-    background-color: {"#0f0f0f" if dark else "#ffffff"};
+    background-color: {"#0e0e0e" if dark else "#ffffff"};
     color: {"#ffffff" if dark else "#000000"};
 }}
 input, textarea {{
@@ -81,83 +109,99 @@ input, textarea {{
     color: {"#ffffff" if dark else "#000000"} !important;
 }}
 .chat-user {{
-    background:#2a2a2a; padding:12px; border-radius:10px; margin-bottom:6px;
+    background: {"#1c1c1c" if dark else "#eaeaea"};
+    padding: 12px;
+    border-radius: 10px;
+    margin-bottom: 8px;
 }}
 .chat-bot {{
-    background:#1c1c1c; padding:12px; border-radius:10px; margin-bottom:10px;
+    background: {"#2a2a2a" if dark else "#dcdcdc"};
+    padding: 12px;
+    border-radius: 10px;
+    margin-bottom: 12px;
+}}
+section[data-testid="stSidebar"] {{
+    background-color: {"#141414" if dark else "#f5f5f5"};
 }}
 </style>
 """, unsafe_allow_html=True)
 
-# ================= SECRETS =================
+# ---------------- API KEYS ----------------
 OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
-Z_IMAGE_API = st.secrets["Z_IMAGE_API"]
+HF_TOKEN = st.secrets["HF_TOKEN"]
+HF_SPACE_URL = st.secrets["HF_SPACE_URL"]
 
 client = OpenAI(api_key=OPENAI_KEY)
 
-# ================= PROMPT FIX =================
-def fix_prompt_tr(text):
+# ---------------- PROMPT FIX ----------------
+def fix_prompt_tr(user_prompt: str) -> str:
     return f"""
-Ultra realistic photo.
+Ultra realistic high quality photograph.
 
 Subject:
-{text}
+{user_prompt}
 
 Style:
-realistic photography, correct anatomy, natural lighting,
-cinematic, DSLR, sharp focus, real world.
+realistic photography, natural proportions, correct perspective,
+cinematic lighting, sharp focus, DSLR photo, natural colors,
+professional composition, detailed textures.
 
-Negative:
-cartoon, anime, illustration, surreal, fantasy, deformed,
-extra limbs, bad anatomy, text, watermark, low quality
+Negative prompt:
+fantasy, surreal, abstract, cartoon, anime, illustration,
+distorted, deformed, extra limbs, extra objects, floating,
+unrealistic colors, low quality, blurry, watermark, text
 """
 
-# ================= IMAGE =================
+# ---------------- IMAGE (HF SPACE) ----------------
 def generate_image(prompt):
-    payload = {
-        "data": [
-            prompt,
-            1024,
-            1024,
-            20,
-            7.5
-        ]
-    }
+    try:
+        response = requests.post(
+            f"{HF_SPACE_URL}/run/predict",
+            headers={
+                "Authorization": f"Bearer {HF_TOKEN}",
+                "Content-Type": "application/json"
+            },
+            json={"data": [prompt]},
+            timeout=180
+        )
 
-    r = requests.post(Z_IMAGE_API, json=payload, timeout=180)
+        if response.status_code != 200:
+            st.error(f"HF hata: {response.status_code}")
+            return None
 
-    if r.status_code != 200:
-        st.error("❌ Görsel API hata")
+        result = response.json()
+        image_base64 = result["data"][0].split(",")[1]
+        image_bytes = base64.b64decode(image_base64)
+        return Image.open(BytesIO(image_bytes))
+
+    except Exception as e:
+        st.error(f"Görsel hata: {e}")
         return None
 
-    img_b64 = r.json()["data"][0].split(",")[1]
-    img_bytes = base64.b64decode(img_b64)
-    return Image.open(BytesIO(img_bytes))
-
-# ================= SIDEBAR =================
+# ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.title("⚙️ Menü")
     st.markdown(f"👤 **{st.session_state.user_name}**")
 
-    if st.button("🌙 / ☀️ Tema"):
-        st.session_state.theme = "light" if dark else "dark"
-        st.rerun()
-
-    if st.button("🚪 Çıkış"):
+    if st.button("🚪 Çıkış Yap"):
         st.session_state.user_name = None
         st.rerun()
 
-    mode = st.radio("Mod", ["💬 Sohbet", "🎨 Görsel"])
+    if st.button("🌙 / ☀️ Tema Değiştir"):
+        st.session_state.theme = "light" if dark else "dark"
+        st.rerun()
 
-# ================= SESSION =================
+    mode = st.radio("Mod Seç", ["💬 Sohbet", "🎨 Görsel Üretim", "🔍 Araştırma"])
+
+# ---------------- SESSION ----------------
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# ================= MAIN =================
+# ---------------- MAIN ----------------
 st.title("🤖 Burak GPT")
-st.caption("Basit Türkçe → Stabil Yapay Zeka")
+st.caption("Basit Türkçe → Gerçekçi Görsel")
 
-# ================= CHAT =================
+# ---------------- CHAT ----------------
 if mode == "💬 Sohbet":
     for m in st.session_state.messages:
         cls = "chat-user" if m["role"] == "user" else "chat-bot"
@@ -167,26 +211,37 @@ if mode == "💬 Sohbet":
             unsafe_allow_html=True
         )
 
-    msg = st.text_input("Mesaj yaz")
+    user_input = st.text_input("Mesaj yaz...")
 
-    if st.button("Gönder") and msg:
-        st.session_state.messages.append({"role": "user", "content": msg})
-
-        res = client.responses.create(
+    if st.button("Gönder") and user_input:
+        st.session_state.messages.append({"role": "user", "content": user_input})
+        response = client.responses.create(
             model="gpt-4.1-mini",
             input=st.session_state.messages
         )
-
         st.session_state.messages.append(
-            {"role": "assistant", "content": res.output_text}
+            {"role": "assistant", "content": response.output_text}
         )
         st.rerun()
 
-# ================= IMAGE =================
-else:
-    prompt = st.text_input("Görseli basit Türkçe anlat")
+# ---------------- IMAGE ----------------
+elif mode == "🎨 Görsel Üretim":
+    prompt = st.text_input("Görseli basitçe anlat (Türkçe)")
 
     if st.button("Görsel Oluştur") and prompt:
-        img = generate_image(fix_prompt_tr(prompt))
-        if img:
-            st.image(img, width=400)
+        fixed = fix_prompt_tr(prompt)
+        image = generate_image(fixed)
+        if image:
+            st.image(image, width=400)
+        else:
+            st.info("ℹ️ Görsel üretilemedi")
+
+# ---------------- RESEARCH ----------------
+else:
+    query = st.text_input("Araştırma konusu yaz")
+    if st.button("Araştır") and query:
+        response = client.responses.create(
+            model="gpt-4.1-mini",
+            input=f"Araştır: {query}"
+        )
+        st.markdown(response.output_text)
