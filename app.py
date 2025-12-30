@@ -133,13 +133,30 @@ def generate_image(prompt):
             timeout=120
         )
 
-        if "image" not in response.headers.get("content-type", "").lower():
+        # HATA VARSA GÖSTER
+        if response.status_code != 200:
+            st.error(f"HF Hatası: {response.text}")
             return None
 
-        return Image.open(BytesIO(response.content))
-    except:
+        content_type = response.headers.get("content-type", "")
+
+        # Direkt image geldiyse
+        if "image" in content_type:
+            return Image.open(BytesIO(response.content))
+
+        # JSON geldiyse (base64 olabilir)
+        data = response.json()
+
+        if isinstance(data, dict) and "error" in data:
+            st.error(f"HF Error: {data['error']}")
+            return None
+
+        st.error("Bilinmeyen HF cevabı")
         return None
 
+    except Exception as e:
+        st.error(str(e))
+        return None
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.title("⚙️ Menü")
