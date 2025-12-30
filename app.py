@@ -69,30 +69,42 @@ def generate_image(prompt):
         response = requests.post(
             HF_API_URL,
             headers=HF_HEADERS,
-            json={"inputs": prompt},
+            json={
+                "inputs": prompt,
+                "options": {
+                    "wait_for_model": True
+                }
+            },
             timeout=120
         )
 
-        if response.status_code != 200:
-            st.warning("⚠️ HF API yanıt vermedi")
-            return None
-
         content_type = response.headers.get("content-type", "").lower()
 
+        # Eğer görsel GELMEDİYSE
         if "image" not in content_type:
             try:
-                error_data = response.json()
-                error_message = error_data.get("error", "HF görsel üretim hatası")
-            except Exception:
-                error_message = "HF bilinmeyen hata"
+                data = response.json()
+                error = data.get("error", "")
 
-            st.warning(f"⚠️ Görsel üretilemedi: {error_message}")
+                if "loading" in error.lower():
+                    st.info("⏳ Model yükleniyor, 10-20 saniye sonra tekrar dene")
+                else:
+                    st.warning(f"⚠️ HF API yanıt vermedi: {error}")
+
+            except Exception:
+                st.warning("⚠️ HF API boş yanıt döndü")
+
             return None
 
+        # Görsel geldiyse
         return Image.open(BytesIO(response.content))
 
+    except requests.exceptions.Timeout:
+        st.error("⏱️ Zaman aşımı. HF çok yoğun.")
+        return None
+
     except Exception as e:
-        st.error(f"❌ Görsel üretim hatası: {e}")
+        st.error(f"❌ Beklenmeyen hata: {e}")
         return None
 
 # ---------------- SIDEBAR ----------------
