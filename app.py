@@ -70,8 +70,16 @@ def generate_image(prompt):
         timeout=120
     )
 
-    if "image" not in response.headers.get("content-type", ""):
-        raise Exception(response.json())
+  if "image" not in response.headers.get("content-type", "").lower():
+    try:
+        error_data = response.json()
+        error_message = error_data.get("error", "HF görsel üretim hatası")
+    except Exception:
+        error_message = "HF bilinmeyen hata"
+
+    st.warning(f"⚠️ Görsel üretilemedi: {error_message}")
+    return None
+
 
     return Image.open(BytesIO(response.content))
 
