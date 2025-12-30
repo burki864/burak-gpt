@@ -1,0 +1,17 @@
+{
+  "last_id": 2,
+  "users": {
+    "user1": {
+      "name": "Ali",
+      "active": true,
+      "banned": false,
+      "created_at": "2025-01-01 20:10"
+    },
+    "user2": {
+      "name": "Veli",
+      "active": false,
+      "banned": false,
+      "created_at": "2025-01-02 18:40"
+    }
+  }
+}
