@@ -137,28 +137,27 @@ def generate_image(prompt):
     try:
         response = requests.post(
             Z_IMAGE_API,
-            json={"prompt": prompt},
+            json={
+                "data": [prompt]
+            },
             timeout=120
         )
 
         if response.status_code != 200:
-            st.error("Z-Image API hata verdi")
+            st.error(f"Z-Image API hata: {response.status_code}")
             return None
 
-        data = response.json()
-        image_base64 = data.get("image")
+        result = response.json()
 
-        if not image_base64:
-            st.error("Görsel dönmedi")
-            return None
+        # Gradio çıktısı
+        image_base64 = result["data"][0]
 
-        image_bytes = base64.b64decode(image_base64)
+        image_bytes = base64.b64decode(image_base64.split(",")[-1])
         return Image.open(BytesIO(image_bytes))
 
     except Exception as e:
         st.error(f"Görsel hata: {e}")
         return None
-
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.title("⚙️ Menü")
