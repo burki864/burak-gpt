@@ -145,15 +145,20 @@ def generate_image(prompt):
         )
 
         if response.status_code != 200:
+            st.error(f"HF Hata: {response.status_code}")
             return None
 
-        if "image" in response.headers.get("content-type", ""):
+        content_type = response.headers.get("content-type", "")
+
+        if "image" in content_type:
             return Image.open(BytesIO(response.content))
+        else:
+            st.error("HF image döndürmedi")
+            return None
 
+    except Exception as e:
+        st.error(f"Görsel hata: {e}")
         return None
-    except:
-        return None
-
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
     st.title("⚙️ Menü")
