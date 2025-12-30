@@ -1,0 +1,2 @@
+APP_NAME = "Burak GPT"
+MAX_USERS = 9999
