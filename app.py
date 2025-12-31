@@ -60,12 +60,6 @@ input {{
     background: linear-gradient(135deg,#6a5acd,#00c6ff);
     box-shadow: 0 0 22px rgba(0,198,255,0.6);
 }}
-
-.ai-frame img {{
-    width:320px;
-    border-radius:14px;
-    display:block;
-}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -155,7 +149,14 @@ cartoon, anime, illustration, watermark, low quality
 def generate_image(prompt: str):
     client = Client("burak12321/burak-gpt-image")
     result = client.predict(prompt)
-    return result[0] if isinstance(result, list) else result
+
+    if isinstance(result, list) and len(result) > 0:
+        return result[0]
+
+    if isinstance(result, str):
+        return result
+
+    return None
 
 # ================= MAIN =================
 st.title("🤖 Burak GPT")
@@ -170,12 +171,11 @@ for m in st.session_state.chat:
         unsafe_allow_html=True
     )
 
-# IMAGE OUTPUT (RERUN SAFE)
+# IMAGE OUTPUT (SAFE)
 if st.session_state.last_image:
-    st.markdown(
-        f"<div class='ai-frame'><img src='{st.session_state.last_image}'></div>",
-        unsafe_allow_html=True
-    )
+    st.markdown("<div class='ai-frame'>", unsafe_allow_html=True)
+    st.image(st.session_state.last_image, width=320)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ================= INPUT =================
 c1, c2 = st.columns([10, 1])
@@ -200,6 +200,11 @@ if send and txt.strip():
             st.session_state.chat.append({
                 "role": "assistant",
                 "content": "🖼️ Görsel hazır"
+            })
+        else:
+            st.session_state.chat.append({
+                "role": "assistant",
+                "content": "❌ Görsel üretilemedi"
             })
 
     else:
