@@ -184,21 +184,28 @@ if send and txt.strip():
         "content": txt
     })
 
-    if wants_image(txt):
-        st.info("🎨 Görsel oluşturuluyor…")
-        img = generate_image(clean_image_prompt(txt))
+  if wants_image(txt):
+    st.info("🎨 Görsel oluşturuluyor...")
 
-        if img:
-            st.session_state.last_image = img
+    img = generate_image(clean_image_prompt(txt))
 
-    else:
-        res = openai_client.responses.create(
-            model="gpt-4.1-mini",
-            input=st.session_state.chat
-        )
+    if img:
+        st.session_state.last_image = img
         st.session_state.chat.append({
             "role": "assistant",
-            "content": res.output_text
+            "content": "🖼️ Görsel hazır"
         })
 
-    st.rerun()
+else:
+    res = openai_client.responses.create(
+        model="gpt-4.1-mini",
+        input=st.session_state.chat
+    )
+
+    st.session_state.chat.append({
+        "role": "assistant",
+        "content": res.output_text
+    })
+
+st.rerun()
+
