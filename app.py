@@ -191,16 +191,35 @@ with c2:
     send = st.button("➤")
 
 if send and txt.strip():
-    st.session_state.chat.append({"role":"user","content":txt})
+    st.session_state.chat.append({
+        "role": "user",
+        "content": txt
+    })
 
-  if wants_image(txt):
-    st.info("🎨 Görsel oluşturuluyor…")
-    img = generate_image(clean_image_prompt(txt))
+    if wants_image(txt):
+        st.info("🎨 Görsel oluşturuluyor…")
 
-    if img:
-        st.markdown("<div class='ai-frame'>", unsafe_allow_html=True)
-        st.image(img, width=320)
-        st.markdown("</div>", unsafe_allow_html=True)
+        img = generate_image(clean_image_prompt(txt))
+
+        if img:
+            st.markdown(
+                f"<div class='ai-frame'><img src='{img}' width='320'></div>",
+                unsafe_allow_html=True
+            )
+
+    else:
+        res = openai_client.responses.create(
+            model="gpt-4.1-mini",
+            input=st.session_state.chat
+        )
+
+        st.session_state.chat.append({
+            "role": "assistant",
+            "content": res.output_text
+        })
+
+    st.rerun()
+
 
     else:
         res = openai_client.responses.create(
