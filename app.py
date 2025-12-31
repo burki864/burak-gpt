@@ -32,30 +32,35 @@ st.markdown(f"""
     background-color: {"#0e0e0e" if dark else "#ffffff"};
     color: {"#ffffff" if dark else "#000000"};
 }}
+
 .chat-user {{
     background: {"#1c1c1c" if dark else "#eaeaea"};
     padding:12px;
     border-radius:12px;
     margin-bottom:8px;
 }}
+
 .chat-bot {{
     background: {"#2a2a2a" if dark else "#dcdcdc"};
     padding:12px;
     border-radius:12px;
     margin-bottom:12px;
 }}
+
 input {{
     background-color: {"#1e1e1e" if dark else "#f2f2f2"} !important;
     color: {"#ffffff" if dark else "#000000"} !important;
 }}
+
 .ai-frame {{
     display:inline-block;
     padding:10px;
     margin-top:12px;
     border-radius:18px;
     background: linear-gradient(135deg,#6a5acd,#00c6ff);
-    box-shadow: 0 0 20px rgba(0,198,255,0.55);
+    box-shadow: 0 0 22px rgba(0,198,255,0.6);
 }}
+
 .ai-frame img {{
     width:320px;
     border-radius:14px;
@@ -95,6 +100,7 @@ if not st.session_state.user:
         }).execute()
 
         st.rerun()
+
     st.stop()
 
 user = st.session_state.user
@@ -129,10 +135,10 @@ if "last_image" not in st.session_state:
     st.session_state.last_image = None
 
 # ================= HELPERS =================
-def wants_image(t):
+def wants_image(t: str) -> bool:
     return any(k in t.lower() for k in ["çiz", "resim", "görsel", "image", "foto"])
 
-def clean_image_prompt(p):
+def clean_image_prompt(p: str) -> str:
     return f"""
 Ultra realistic high quality photograph.
 
@@ -146,7 +152,7 @@ Negative prompt:
 cartoon, anime, illustration, watermark, low quality
 """
 
-def generate_image(prompt):
+def generate_image(prompt: str):
     client = Client("burak12321/burak-gpt-image")
     result = client.predict(prompt)
     return result[0] if isinstance(result, list) else result
@@ -155,7 +161,7 @@ def generate_image(prompt):
 st.title("🤖 Burak GPT")
 st.caption("Sohbet + Görsel • Gerçek AI")
 
-# CHAT
+# CHAT HISTORY
 for m in st.session_state.chat:
     cls = "chat-user" if m["role"] == "user" else "chat-bot"
     name = "Sen" if m["role"] == "user" else "Burak GPT"
@@ -172,7 +178,7 @@ if st.session_state.last_image:
     )
 
 # ================= INPUT =================
-c1, c2 = st.columns([10,1])
+c1, c2 = st.columns([10, 1])
 with c1:
     txt = st.text_input("", placeholder="Bir şey yaz…", label_visibility="collapsed")
 with c2:
@@ -184,28 +190,27 @@ if send and txt.strip():
         "content": txt
     })
 
-  if wants_image(txt):
-    st.info("🎨 Görsel oluşturuluyor...")
+    if wants_image(txt):
+        st.info("🎨 Görsel oluşturuluyor...")
 
-    img = generate_image(clean_image_prompt(txt))
+        img = generate_image(clean_image_prompt(txt))
 
-    if img:
-        st.session_state.last_image = img
+        if img:
+            st.session_state.last_image = img
+            st.session_state.chat.append({
+                "role": "assistant",
+                "content": "🖼️ Görsel hazır"
+            })
+
+    else:
+        res = openai_client.responses.create(
+            model="gpt-4.1-mini",
+            input=st.session_state.chat
+        )
+
         st.session_state.chat.append({
             "role": "assistant",
-            "content": "🖼️ Görsel hazır"
+            "content": res.output_text
         })
 
-else:
-    res = openai_client.responses.create(
-        model="gpt-4.1-mini",
-        input=st.session_state.chat
-    )
-
-    st.session_state.chat.append({
-        "role": "assistant",
-        "content": res.output_text
-    })
-
-st.rerun()
-
+    st.rerun()
