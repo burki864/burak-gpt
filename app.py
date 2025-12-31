@@ -150,12 +150,15 @@ photorealistic, cinematic lighting, ultra detail.
 Negative prompt:
 cartoon, anime, illustration, watermark, low quality
 """
-
 def generate_image(prompt):
     client = Client("burak12321/burak-gpt-image")
     result = client.predict(prompt)
-    return result[0] if isinstance(result, list) else result
 
+    # eğer listeyse ilkini al
+    if isinstance(result, list):
+        return result[0]
+
+    return result
 # ================= MAIN =================
 st.title("🤖 Burak GPT")
 st.caption("Sohbet + Görsel • Gerçek AI")
@@ -191,10 +194,14 @@ if send and txt.strip():
     st.session_state.chat.append({"role":"user","content":txt})
 
     if wants_image(txt):
-        st.info("🎨 Görsel oluşturuluyor…")
-        img = generate_image(clean_image_prompt(txt))
-        if img:
-            st.session_state.last_image = img
+    st.info("🎨 Görsel oluşturuluyor…")
+    img = generate_image(clean_image_prompt(txt))
+
+    if img:
+        st.markdown("<div class='ai-frame'>", unsafe_allow_html=True)
+        st.image(img, width=320)
+        st.markdown("</div>", unsafe_allow_html=True)
+
     else:
         res = openai_client.responses.create(
             model="gpt-4.1-mini",
