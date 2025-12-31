@@ -25,6 +25,7 @@ if "theme" not in st.session_state:
 
 dark = st.session_state.theme == "dark"
 
+# ================= STYLE =================
 st.markdown(f"""
 <style>
 .stApp {{
@@ -47,6 +48,17 @@ input {{
     background-color: {"#1e1e1e" if dark else "#f2f2f2"} !important;
     color: {"#ffffff" if dark else "#000000"} !important;
 }}
+.ai-frame {{
+    display:inline-block;
+    padding:10px;
+    border-radius:16px;
+    background: linear-gradient(135deg,#6a5acd,#00c6ff);
+    box-shadow: 0 0 18px rgba(0,198,255,0.5);
+}}
+.ai-frame img {{
+    border-radius:12px;
+    display:block;
+}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -67,14 +79,13 @@ if not st.session_state.user:
     name = st.text_input("Adın nedir?")
 
     if st.button("Devam") and name.strip():
-        username = name.strip()
-        st.session_state.user = username
-        cookies["user"] = username
+        user = name.strip()
+        st.session_state.user = user
+        cookies["user"] = user
         cookies.save()
 
-        # kullanıcıyı garanti altına al
         supabase.table("users").upsert({
-            "username": username,
+            "username": user,
             "banned": False,
             "deleted": False,
             "is_online": True,
@@ -88,11 +99,9 @@ user = st.session_state.user
 
 # ================= USER CHECK =================
 res = supabase.table("users").select("*").eq("username", user).execute()
-
 data = res.data if res and isinstance(res.data, list) else []
 
-# kullanıcı yoksa oluştur
-if len(data) == 0:
+if not data:
     supabase.table("users").insert({
         "username": user,
         "banned": False,
@@ -100,16 +109,12 @@ if len(data) == 0:
         "is_online": True,
         "last_seen": datetime.utcnow().isoformat()
     }).execute()
-    info = {
-        "banned": False,
-        "deleted": False
-    }
+    info = {"banned": False, "deleted": False}
 else:
     info = data[0]
 
-# ================= BAN / DELETE =================
 if info.get("deleted"):
-    st.error("❌ Hesabın devre dışı bırakıldı")
+    st.error("❌ Hesabın devre dışı")
     st.stop()
 
 if info.get("banned"):
@@ -130,8 +135,8 @@ if "chat" not in st.session_state:
     st.session_state.chat = []
 
 # ================= HELPERS =================
-def wants_image(text):
-    return any(k in text.lower() for k in ["çiz", "resim", "görsel", "image", "foto"])
+def wants_image(t):
+    return any(k in t.lower() for k in ["çiz","resim","görsel","image","foto"])
 
 def clean_image_prompt(p):
     return f"""
@@ -151,24 +156,15 @@ os.environ["HF_TOKEN"] = st.secrets["HF_TOKEN"]
 
 def generate_image(prompt):
     client = Client("burak12321/burak-gpt-image")
-    return client.predict(prompt)
+    result = client.predict(prompt)
+    return result[0] if isinstance(result, list) else result
 
 # ================= SIDEBAR =================
 with st.sidebar:
     st.markdown(f"👤 **{user}**")
-
     if st.button("🌙 / ☀️ Tema"):
         st.session_state.theme = "light" if dark else "dark"
         st.rerun()
-
-    if user.lower() == "burak":
-        st.markdown("""
-        <a href="https://burak-gpt-adm1n.streamlit.app" target="_blank">
-        <button style="width:100%;padding:10px;border-radius:8px;">
-        🛠️ Admin Panel
-        </button>
-        </a>
-        """, unsafe_allow_html=True)
 
 # ================= MAIN =================
 st.title("🤖 Burak GPT")
@@ -190,21 +186,24 @@ with c2:
     send = st.button("➤")
 
 if send and txt.strip():
-    st.session_state.chat.append({"role": "user", "content": txt})
+    st.session_state.chat.append({"role":"user","content":txt})
 
     if wants_image(txt):
         st.info("🎨 Görsel oluşturuluyor…")
         img = generate_image(clean_image_prompt(txt))
         if img:
-            st.image(img, width=420)
+            st.markdown(
+                f"<div class='ai-frame'><img src='{img}' width='320'></div>",
+                unsafe_allow_html=True
+            )
     else:
         res = openai_client.responses.create(
             model="gpt-4.1-mini",
             input=st.session_state.chat
         )
         st.session_state.chat.append({
-            "role": "assistant",
-            "content": res.output_text
+            "role":"assistant",
+            "content":res.output_text
         })
 
     st.rerun()
