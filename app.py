@@ -32,26 +32,22 @@ st.markdown(f"""
     background-color: {"#0e0e0e" if dark else "#ffffff"};
     color: {"#ffffff" if dark else "#000000"};
 }}
-
 .chat-user {{
     background: {"#1c1c1c" if dark else "#eaeaea"};
     padding:12px;
     border-radius:12px;
     margin-bottom:8px;
 }}
-
 .chat-bot {{
     background: {"#2a2a2a" if dark else "#dcdcdc"};
     padding:12px;
     border-radius:12px;
     margin-bottom:12px;
 }}
-
 input {{
     background-color: {"#1e1e1e" if dark else "#f2f2f2"} !important;
     color: {"#ffffff" if dark else "#000000"} !important;
 }}
-
 .ai-frame {{
     display:inline-block;
     padding:10px;
@@ -60,7 +56,6 @@ input {{
     background: linear-gradient(135deg,#6a5acd,#00c6ff);
     box-shadow: 0 0 20px rgba(0,198,255,0.55);
 }}
-
 .ai-frame img {{
     width:320px;
     border-radius:14px;
@@ -150,15 +145,12 @@ photorealistic, cinematic lighting, ultra detail.
 Negative prompt:
 cartoon, anime, illustration, watermark, low quality
 """
+
 def generate_image(prompt):
     client = Client("burak12321/burak-gpt-image")
     result = client.predict(prompt)
+    return result[0] if isinstance(result, list) else result
 
-    # eğer listeyse ilkini al
-    if isinstance(result, list):
-        return result[0]
-
-    return result
 # ================= MAIN =================
 st.title("🤖 Burak GPT")
 st.caption("Sohbet + Görsel • Gerçek AI")
@@ -172,14 +164,10 @@ for m in st.session_state.chat:
         unsafe_allow_html=True
     )
 
-# IMAGE OUTPUT (🔥 RERUN SAFE)
+# IMAGE OUTPUT (RERUN SAFE)
 if st.session_state.last_image:
     st.markdown(
-        f"""
-        <div class="ai-frame">
-            <img src="{st.session_state.last_image}">
-        </div>
-        """,
+        f"<div class='ai-frame'><img src='{st.session_state.last_image}'></div>",
         unsafe_allow_html=True
     )
 
@@ -198,37 +186,19 @@ if send and txt.strip():
 
     if wants_image(txt):
         st.info("🎨 Görsel oluşturuluyor…")
-
         img = generate_image(clean_image_prompt(txt))
 
         if img:
-            st.markdown(
-                f"<div class='ai-frame'><img src='{img}' width='320'></div>",
-                unsafe_allow_html=True
-            )
+            st.session_state.last_image = img
 
     else:
         res = openai_client.responses.create(
             model="gpt-4.1-mini",
             input=st.session_state.chat
         )
-
         st.session_state.chat.append({
             "role": "assistant",
             "content": res.output_text
-        })
-
-    st.rerun()
-
-
-    else:
-        res = openai_client.responses.create(
-            model="gpt-4.1-mini",
-            input=st.session_state.chat
-        )
-        st.session_state.chat.append({
-            "role":"assistant",
-            "content":res.output_text
         })
 
     st.rerun()
