@@ -2,12 +2,11 @@ import streamlit as st
 import json
 import os
 from datetime import datetime
-from io import BytesIO
 from PIL import Image
-from openai import OpenAI
 from gradio_client import Client
+from openai import OpenAI
 
-# ---------------- PAGE ----------------
+# ---------------- CONFIG ----------------
 st.set_page_config(
     page_title="Burak GPT",
     page_icon="🤖",
@@ -15,208 +14,176 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ---------------- USER DATA ----------------
-USER_FILE = "user_data.json"
+DATA_FILE = "chats.json"
 
-if not os.path.exists(USER_FILE):
-    with open(USER_FILE, "w") as f:
-        json.dump({"counter": 0, "users": {}}, f)
-
-def load_users():
-    with open(USER_FILE, "r") as f:
+# ---------------- STORAGE ----------------
+def load_data():
+    if not os.path.exists(DATA_FILE):
+        return {}
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def save_users(data):
-    with open(USER_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+def save_data(data):
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
-if "user_name" not in st.session_state:
-    st.session_state.user_name = None
+# ---------------- SESSION INIT ----------------
+if "user" not in st.session_state:
+    st.session_state.user = None
 
-# ---------------- LOGIN ----------------
-if st.session_state.user_name is None:
+if "chat_id" not in st.session_state:
+    st.session_state.chat_id = None
+
+if "theme" not in st.session_state:
+    st.session_state.theme = "dark"
+
+data = load_data()
+
+# ---------------- LOGIN (ONCE) ----------------
+if st.session_state.user is None:
     st.title("👋 Hoş Geldin")
-    name_input = st.text_input("Adın nedir?")
+    name = st.text_input("Adın nedir? (boş geçebilirsin)")
 
-    col1, col2 = st.columns(2)
-
-    if col1.button("Devam Et") or col2.button("Bu adımı geç"):
-        data = load_users()
-
-        if name_input.strip() == "":
-            data["counter"] += 1
-            username = f"user{data['counter']}"
-        else:
-            username = name_input.strip()
-
-        if username not in data["users"]:
-            data["users"][username] = {
-                "name": username,
-                "visits": 1,
-                "last_seen": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "active": True,
-                "banned": False
-            }
-        else:
-            user = data["users"][username]
-            if user.get("banned"):
-                st.error("🚫 Hesabınız banlanmıştır.")
-                st.stop()
-            if not user.get("active", True):
-                st.error("❌ Hesabınız kapatılmıştır.")
-                st.stop()
-            user["visits"] += 1
-            user["last_seen"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        save_users(data)
-        st.session_state.user_name = username
+    if st.button("Devam Et"):
+        user = name.strip() or f"user_{len(data)+1}"
+        if user not in data:
+            data[user] = {"chats": {}}
+            save_data(data)
+        st.session_state.user = user
         st.rerun()
 
     st.stop()
 
-# ---------------- THEME ----------------
-if "theme" not in st.session_state:
-    st.session_state.theme = "dark"
+user = st.session_state.user
 
+# ---------------- THEME ----------------
 dark = st.session_state.theme == "dark"
 
-# ---------------- CSS ----------------
 st.markdown(f"""
 <style>
 .stApp {{
-    background-color: {"#0e0e0e" if dark else "#ffffff"};
+    background-color: {"#0f0f0f" if dark else "#ffffff"};
     color: {"#ffffff" if dark else "#000000"};
 }}
-input {{
-    background-color: {"#1e1e1e" if dark else "#f2f2f2"} !important;
-    color: {"#ffffff" if dark else "#000000"} !important;
-}}
 .chat-user {{
-    background: {"#1c1c1c" if dark else "#eaeaea"};
+    background: {"#1e1e1e" if dark else "#f0f0f0"};
     padding: 12px;
-    border-radius: 10px;
+    border-radius: 12px;
     margin-bottom: 8px;
 }}
 .chat-bot {{
-    background: {"#2a2a2a" if dark else "#dcdcdc"};
+    background: {"#2a2a2a" if dark else "#e6e6e6"};
     padding: 12px;
-    border-radius: 10px;
+    border-radius: 12px;
     margin-bottom: 12px;
+}}
+.skeleton {{
+    background: linear-gradient(90deg,#2a2a2a,#3a3a3a,#2a2a2a);
+    height: 120px;
+    border-radius: 12px;
+    animation: shimmer 1.5s infinite;
+}}
+@keyframes shimmer {{
+    0% {{background-position:-200px}}
+    100% {{background-position:200px}}
 }}
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- API KEYS ----------------
-OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
-HF_TOKEN = st.secrets["HF_TOKEN"]
+# ---------------- API ----------------
+openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+hf_client = Client("burak12321/burak-gpt-image")
 
-client_openai = OpenAI(api_key=OPENAI_KEY)
+# ---------------- HELPERS ----------------
+def new_chat():
+    chat_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    data[user]["chats"][chat_id] = {
+        "title": "Yeni Sohbet",
+        "messages": []
+    }
+    save_data(data)
+    st.session_state.chat_id = chat_id
 
-# ---------------- PROMPT FIX ----------------
-def fix_prompt_tr(user_prompt: str) -> str:
-    return f"""
-Ultra realistic high quality photograph.
+def auto_title(text):
+    return text[:40]
 
-Subject:
-{user_prompt}
-
-Style:
-realistic photography, natural proportions, correct perspective,
-cinematic lighting, sharp focus, DSLR photo, natural colors.
-
-Negative prompt:
-fantasy, surreal, abstract, cartoon, anime, illustration,
-distorted, deformed, extra limbs, floating objects,
-low quality, blurry, watermark, text
-"""
-
-# ---------------- IMAGE (HF SPACE - DOĞRU YOL) ----------------
-def generate_image(prompt):
-    try:
-        client = Client("burak12321/burak-gpt-image")
-
-        result = client.predict(
-            prompt=prompt,
-            api_name="/predict"
-        )
-
-        if isinstance(result, str):
-            return Image.open(result)
-
-        if isinstance(result, Image.Image):
-            return result
-
-        st.error("Görsel formatı tanınmadı")
-        return None
-
-    except Exception as e:
-        st.error(f"Görsel hata: {e}")
-        return None
+def is_image_prompt(text):
+    keywords = ["çiz", "oluştur", "görsel", "resim", "fotoğraf"]
+    return any(k in text.lower() for k in keywords)
 
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
-    st.title("⚙️ Menü")
-    st.markdown(f"👤 **{st.session_state.user_name}**")
+    st.markdown(f"👤 **{user}**")
 
-    if st.button("🚪 Çıkış Yap"):
-        st.session_state.user_name = None
+    if st.button("🆕 Yeni Sohbet"):
+        new_chat()
         st.rerun()
 
-    if st.button("🌙 / ☀️ Tema Değiştir"):
+    st.markdown("---")
+
+    chats = data[user]["chats"]
+    for cid, chat in sorted(chats.items(), reverse=True):
+        if st.button(chat["title"], key=cid):
+            st.session_state.chat_id = cid
+            st.rerun()
+
+    st.markdown("---")
+
+    if st.button("🌙 / ☀️ Tema"):
         st.session_state.theme = "light" if dark else "dark"
         st.rerun()
 
-    mode = st.radio("Mod Seç", ["💬 Sohbet", "🎨 Görsel Üretim", "🔍 Araştırma"])
+# ---------------- CHAT INIT ----------------
+if st.session_state.chat_id is None:
+    new_chat()
 
-# ---------------- SESSION ----------------
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+chat = data[user]["chats"][st.session_state.chat_id]
 
 # ---------------- MAIN ----------------
 st.title("🤖 Burak GPT")
-st.caption("Basit Türkçe → Düzgün Gerçekçi Görsel")
 
-# ---------------- CHAT ----------------
-if mode == "💬 Sohbet":
-    for m in st.session_state.messages:
-        cls = "chat-user" if m["role"] == "user" else "chat-bot"
-        name = "Sen" if m["role"] == "user" else "Burak GPT"
-        st.markdown(
-            f"<div class='{cls}'><b>{name}:</b> {m['content']}</div>",
-            unsafe_allow_html=True
-        )
+# ---------------- MESSAGES ----------------
+for msg in chat["messages"]:
+    cls = "chat-user" if msg["role"] == "user" else "chat-bot"
+    name = "Sen" if msg["role"] == "user" else "Burak GPT"
+    st.markdown(f"<div class='{cls}'><b>{name}:</b> {msg['content']}</div>", unsafe_allow_html=True)
 
-    user_input = st.text_input("Mesaj yaz...")
+# ---------------- INPUT ----------------
+col1, col2 = st.columns([8,1])
 
-    if st.button("Gönder") and user_input:
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        response = client_openai.responses.create(
-            model="gpt-4.1-mini",
-            input=st.session_state.messages
-        )
-        st.session_state.messages.append(
-            {"role": "assistant", "content": response.output_text}
-        )
-        st.rerun()
+with col1:
+    user_input = st.text_input("Mesaj yaz…")
 
-# ---------------- IMAGE ----------------
-elif mode == "🎨 Görsel Üretim":
-    prompt = st.text_input("Görseli basitçe anlat (Türkçe)")
+with col2:
+    image_btn = st.button("🎨")
 
-    if st.button("Görsel Oluştur") and prompt:
-        fixed_prompt = fix_prompt_tr(prompt)
-        image = generate_image(fixed_prompt)
-        if image:
-            st.image(image, width=420)
+# ---------------- ACTION ----------------
+if user_input:
+    chat["messages"].append({"role": "user", "content": user_input})
+
+    if chat["title"] == "Yeni Sohbet":
+        chat["title"] = auto_title(user_input)
+
+    save_data(data)
+
+    with st.spinner("Düşünüyorum…"):
+        if image_btn or is_image_prompt(user_input):
+            st.markdown("<div class='skeleton'></div>", unsafe_allow_html=True)
+            try:
+                img = hf_client.predict(prompt=user_input, api_name="/predict")
+                chat["messages"].append({"role": "assistant", "content": "🖼️ Görsel oluşturuldu"})
+                st.image(Image.open(img), width=420)
+            except:
+                chat["messages"].append({"role": "assistant", "content": "❌ Görsel üretilemedi"})
         else:
-            st.info("ℹ️ Görsel üretilemedi")
+            res = openai_client.responses.create(
+                model="gpt-4.1-mini",
+                input=chat["messages"]
+            )
+            chat["messages"].append({
+                "role": "assistant",
+                "content": res.output_text
+            })
 
-# ---------------- RESEARCH ----------------
-else:
-    query = st.text_input("Araştırma konusu yaz")
-    if st.button("Araştır") and query:
-        response = client_openai.responses.create(
-            model="gpt-4.1-mini",
-            input=f"Araştır: {query}"
-        )
-        st.markdown(response.output_text)
+    save_data(data)
+    st.rerun()
