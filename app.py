@@ -148,8 +148,7 @@ cartoon, anime, illustration, low quality, watermark
 
 def generate_image(prompt):
     client = Client("burak12321/burak-gpt-image")
-    return client.predict(prompt=prompt, api_name="/predict")
-
+    return client.predict(prompt_text)
 # ================= SIDEBAR =================
 with st.sidebar:
     st.markdown(f"👤 **{user}**")
