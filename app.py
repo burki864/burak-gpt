@@ -71,6 +71,7 @@ if not st.session_state.user:
         cookies["user"] = username
         cookies.save()
 
+        # kullanıcıyı garanti altına al
         supabase.table("users").upsert({
             "username": username,
             "banned": False,
@@ -87,18 +88,30 @@ user = st.session_state.user
 # ================= USER CHECK =================
 res = supabase.table("users").select("*").eq("username", user).execute()
 
-data = res.data if res else None
+data = res.data if res and isinstance(res.data, list) else []
 
-if not data:
-    # kullanıcı yok → insert at
+# kullanıcı yoksa oluştur
+if len(data) == 0:
+    supabase.table("users").insert({
+        "username": user,
+        "banned": False,
+        "deleted": False,
+        "is_online": True,
+        "last_seen": datetime.utcnow().isoformat()
+    }).execute()
+    info = {
+        "banned": False,
+        "deleted": False
+    }
+else:
+    info = data[0]
 
-info = res.data
-
-if info["deleted"]:
-    st.error("❌ Hesabın devre dışı")
+# ================= BAN / DELETE =================
+if info.get("deleted"):
+    st.error("❌ Hesabın devre dışı bırakıldı")
     st.stop()
 
-if info["banned"]:
+if info.get("banned"):
     st.error("🚫 Hesabın banlandı")
     st.stop()
 
@@ -148,7 +161,7 @@ with st.sidebar:
         st.session_state.theme = "light" if dark else "dark"
         st.rerun()
 
-    if user == "Burak":
+    if user.lower() == "burak":
         st.markdown("""
         <a href="https://burak-gpt-adm1n.streamlit.app" target="_blank">
         <button style="width:100%;padding:10px;border-radius:8px;">
