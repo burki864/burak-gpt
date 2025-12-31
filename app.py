@@ -1,6 +1,5 @@
 import streamlit as st
 import os, json
-from PIL import Image
 from openai import OpenAI
 from gradio_client import Client
 from streamlit_cookies_manager import EncryptedCookieManager
@@ -87,11 +86,11 @@ if not st.session_state.user:
 # ================= BAN CHECK =================
 u = users.get(st.session_state.user, {})
 if u.get("deleted"):
-    st.error("❌ Hesabın devre dışı bırakıldı")
+    st.error("❌ Hesabın devre dışı")
     st.stop()
 
 if u.get("banned"):
-    st.error("🚫 Hesabın banlandı")
+    st.error("🚫 Banlandın")
     st.stop()
 
 # ================= API =================
@@ -101,11 +100,8 @@ openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 if "chat" not in st.session_state:
     st.session_state.chat = []
 
-if "input_text" not in st.session_state:
-    st.session_state.input_text = ""
-
 # ================= HELPERS =================
-def wants_image(t: str) -> bool:
+def wants_image(t):
     return any(k in t.lower() for k in ["çiz", "resim", "görsel", "image", "draw", "foto"])
 
 def generate_image(prompt):
@@ -123,18 +119,12 @@ with st.sidebar:
         st.session_state.theme = "light" if dark else "dark"
         st.rerun()
 
-    st.markdown("---")
-
     if st.session_state.user == "Burak":
-        ADMIN_URL = "https://burak-gpt-adm1n.streamlit.app/?key=SUPER_SECRET_123"
+        st.markdown("---")
         st.markdown(
-            f"""
-            <a href="{ADMIN_URL}" target="_blank">
-            <button style="width:100%;padding:10px;border-radius:8px;">
-            🛠️ Admin Panel
-            </button>
-            </a>
-            """,
+            "<a href='https://burak-gpt-adm1n.streamlit.app/' target='_blank'>"
+            "<button style='width:100%;padding:10px;border-radius:8px;'>🛠️ Admin Panel</button>"
+            "</a>",
             unsafe_allow_html=True
         )
 
@@ -142,7 +132,7 @@ with st.sidebar:
 st.title("🤖 Burak GPT")
 st.caption("Sohbet + Görsel • Gerçek AI")
 
-# ================= CHAT VIEW =================
+# ================= CHAT =================
 for m in st.session_state.chat:
     cls = "chat-user" if m["role"] == "user" else "chat-bot"
     name = "Sen" if m["role"] == "user" else "Burak GPT"
@@ -151,27 +141,29 @@ for m in st.session_state.chat:
         unsafe_allow_html=True
     )
 
-# ================= INPUT =================
-col1, col2 = st.columns([10,1])
+# ================= INPUT (FORM) =================
+with st.form("chat_form", clear_on_submit=True):
+    col1, col2 = st.columns([10,1])
 
-with col1:
-    txt = st.text_input(
-        "",
-        placeholder="Bir şey yaz veya görsel iste…",
-        label_visibility="collapsed",
-        key="input_text"
-    )
+    with col1:
+        txt = st.text_input(
+            "",
+            placeholder="Bir şey yaz veya görsel iste…",
+            label_visibility="collapsed"
+        )
 
-with col2:
-    send = st.button("➤")
+    with col2:
+        send = st.form_submit_button("➤")
 
 # ================= SEND =================
 if send and txt.strip():
-    st.session_state.chat.append({"role":"user","content":txt})
-    st.session_state.input_text = ""
+    st.session_state.chat.append({"role": "user", "content": txt})
 
     if wants_image(txt):
-        st.info("🎨 Görsel oluşturuluyor…")
+        st.session_state.chat.append({
+            "role": "assistant",
+            "content": "🎨 Görsel oluşturuyorum..."
+        })
         img = generate_image(txt)
         if img:
             st.image(img, width=420)
@@ -181,8 +173,8 @@ if send and txt.strip():
             input=st.session_state.chat
         )
         st.session_state.chat.append({
-            "role":"assistant",
-            "content":res.output_text
+            "role": "assistant",
+            "content": res.output_text
         })
 
     st.rerun()
