@@ -1,43 +1,61 @@
 import streamlit as st
-import json
+import json, os
 
-ADMIN_KEY = st.secrets["ADMIN_KEY"]
-DB_FILE = "users.json"
+st.set_page_config("Admin Panel","🛠️","wide")
 
-def load_users():
-    try:
-        with open(DB_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except:
-        return {}
+# ---------- AUTH ----------
+if "admin" not in st.session_state:
+    st.session_state.admin = False
 
-def save_users(data):
-    with open(DB_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
-# 🔐 GİZLİ GİRİŞ
-key = st.text_input("Admin Key", type="password")
-
-if key != ADMIN_KEY:
-    st.warning("Yetkisiz erişim")
+if not st.session_state.admin:
+    st.title("🔐 Admin Girişi")
+    key = st.text_input("Admin Key", type="password")
+    if st.button("Giriş"):
+        if key == st.secrets["ADMIN_KEY"]:
+            st.session_state.admin = True
+            st.rerun()
+        else:
+            st.error("❌ Yetkisiz")
     st.stop()
 
-st.success("👑 Admin Paneli")
+# ---------- USERS ----------
+def load_users():
+    if not os.path.exists("users.json"):
+        return {}
+    return json.load(open("users.json","r"))
+
+def save_users(u):
+    json.dump(u, open("users.json","w"), indent=2)
 
 users = load_users()
-username = st.text_input("Kullanıcı adı")
 
-col1, col2 = st.columns(2)
+st.title("🛠️ Admin Panel")
 
-if col1.button("🚫 Ban"):
-    users[username] = {"status": "banned"}
-    save_users(users)
-    st.success("Banlandı")
+if not users:
+    st.info("Henüz kullanıcı yok")
+    st.stop()
 
-if col2.button("❌ Kapat"):
-    users[username] = {"status": "closed"}
-    save_users(users)
-    st.success("Kapatıldı")
+user = st.selectbox("Kullanıcı", users.keys())
+info = users[user]
 
-st.subheader("📋 Kayıtlı Kullanıcılar")
-st.json(users)
+st.write("Durum:", info)
+
+c1,c2,c3 = st.columns(3)
+
+if c1.button("🚫 Ban"):
+    info["banned"] = True
+
+if c2.button("✅ Unban"):
+    info["banned"] = False
+
+if c3.button("🧹 Soft Delete"):
+    info["deleted"] = True
+
+if st.button("♻️ Geri Aç"):
+    info["deleted"] = False
+
+save_users(users)
+st.success("✔️ Güncellendi")
+
+if st.button("⬅️ GPT’ye Dön"):
+    st.switch_page("app.py")
