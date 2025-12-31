@@ -193,7 +193,7 @@ with c2:
 if send and txt.strip():
     st.session_state.chat.append({"role":"user","content":txt})
 
-    if wants_image(txt):
+  if wants_image(txt):
     st.info("🎨 Görsel oluşturuluyor…")
     img = generate_image(clean_image_prompt(txt))
 
