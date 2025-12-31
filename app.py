@@ -85,11 +85,12 @@ if not st.session_state.user:
 user = st.session_state.user
 
 # ================= USER CHECK =================
-res = supabase.table("users").select("*").eq("username", user).maybe_single().execute()
+res = supabase.table("users").select("*").eq("username", user).execute()
 
-if not res.data:
-    st.error("Kullanıcı bulunamadı")
-    st.stop()
+data = res.data if res else None
+
+if not data:
+    # kullanıcı yok → insert at
 
 info = res.data
 
