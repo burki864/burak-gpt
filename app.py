@@ -32,31 +32,38 @@ st.markdown(f"""
     background-color: {"#0e0e0e" if dark else "#ffffff"};
     color: {"#ffffff" if dark else "#000000"};
 }}
+
 .chat-user {{
     background: {"#1c1c1c" if dark else "#eaeaea"};
     padding:12px;
-    border-radius:10px;
+    border-radius:12px;
     margin-bottom:8px;
 }}
+
 .chat-bot {{
     background: {"#2a2a2a" if dark else "#dcdcdc"};
     padding:12px;
-    border-radius:10px;
+    border-radius:12px;
     margin-bottom:12px;
 }}
+
 input {{
     background-color: {"#1e1e1e" if dark else "#f2f2f2"} !important;
     color: {"#ffffff" if dark else "#000000"} !important;
 }}
+
 .ai-frame {{
     display:inline-block;
     padding:10px;
-    border-radius:16px;
+    margin-top:12px;
+    border-radius:18px;
     background: linear-gradient(135deg,#6a5acd,#00c6ff);
-    box-shadow: 0 0 18px rgba(0,198,255,0.5);
+    box-shadow: 0 0 20px rgba(0,198,255,0.55);
 }}
+
 .ai-frame img {{
-    border-radius:12px;
+    width:320px;
+    border-radius:14px;
     display:block;
 }}
 </style>
@@ -99,19 +106,7 @@ user = st.session_state.user
 
 # ================= USER CHECK =================
 res = supabase.table("users").select("*").eq("username", user).execute()
-data = res.data if res and isinstance(res.data, list) else []
-
-if not data:
-    supabase.table("users").insert({
-        "username": user,
-        "banned": False,
-        "deleted": False,
-        "is_online": True,
-        "last_seen": datetime.utcnow().isoformat()
-    }).execute()
-    info = {"banned": False, "deleted": False}
-else:
-    info = data[0]
+info = res.data[0] if res.data else {"banned": False, "deleted": False}
 
 if info.get("deleted"):
     st.error("❌ Hesabın devre dışı")
@@ -129,14 +124,18 @@ supabase.table("users").update({
 
 # ================= API =================
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+os.environ["HF_TOKEN"] = st.secrets["HF_TOKEN"]
 
 # ================= SESSION =================
 if "chat" not in st.session_state:
     st.session_state.chat = []
 
+if "last_image" not in st.session_state:
+    st.session_state.last_image = None
+
 # ================= HELPERS =================
 def wants_image(t):
-    return any(k in t.lower() for k in ["çiz","resim","görsel","image","foto"])
+    return any(k in t.lower() for k in ["çiz", "resim", "görsel", "image", "foto"])
 
 def clean_image_prompt(p):
     return f"""
@@ -149,32 +148,35 @@ Style:
 photorealistic, cinematic lighting, ultra detail.
 
 Negative prompt:
-cartoon, anime, illustration, low quality, watermark
+cartoon, anime, illustration, watermark, low quality
 """
-
-os.environ["HF_TOKEN"] = st.secrets["HF_TOKEN"]
 
 def generate_image(prompt):
     client = Client("burak12321/burak-gpt-image")
     result = client.predict(prompt)
     return result[0] if isinstance(result, list) else result
 
-# ================= SIDEBAR =================
-with st.sidebar:
-    st.markdown(f"👤 **{user}**")
-    if st.button("🌙 / ☀️ Tema"):
-        st.session_state.theme = "light" if dark else "dark"
-        st.rerun()
-
 # ================= MAIN =================
 st.title("🤖 Burak GPT")
 st.caption("Sohbet + Görsel • Gerçek AI")
 
+# CHAT
 for m in st.session_state.chat:
     cls = "chat-user" if m["role"] == "user" else "chat-bot"
     name = "Sen" if m["role"] == "user" else "Burak GPT"
     st.markdown(
         f"<div class='{cls}'><b>{name}:</b> {m['content']}</div>",
+        unsafe_allow_html=True
+    )
+
+# IMAGE OUTPUT (🔥 RERUN SAFE)
+if st.session_state.last_image:
+    st.markdown(
+        f"""
+        <div class="ai-frame">
+            <img src="{st.session_state.last_image}">
+        </div>
+        """,
         unsafe_allow_html=True
     )
 
@@ -192,10 +194,7 @@ if send and txt.strip():
         st.info("🎨 Görsel oluşturuluyor…")
         img = generate_image(clean_image_prompt(txt))
         if img:
-            st.markdown(
-                f"<div class='ai-frame'><img src='{img}' width='320'></div>",
-                unsafe_allow_html=True
-            )
+            st.session_state.last_image = img
     else:
         res = openai_client.responses.create(
             model="gpt-4.1-mini",
