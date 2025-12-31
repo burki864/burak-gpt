@@ -1,5 +1,5 @@
 import streamlit as st
-import os, json
+import os, json, time
 from datetime import datetime
 from PIL import Image
 from openai import OpenAI
@@ -17,18 +17,18 @@ st.set_page_config(
 # ================= COOKIES =================
 cookies = EncryptedCookieManager(
     prefix="burakgpt_",
-    password="CHANGE_THIS_SECRET_123"
+    password=st.secrets.get("COOKIE_SECRET", "BURAK_GPT_SECRET")
 )
 if not cookies.ready():
     st.stop()
 
-# ================= LOGIN =================
+# ================= LOGIN (KALICI) =================
 if "user_name" not in st.session_state:
     st.session_state.user_name = cookies.get("username")
 
 if not st.session_state.user_name:
     st.title("👋 Hoş Geldin")
-    name = st.text_input("Adın nedir?")
+    name = st.text_input("Adın nedir?", placeholder="örn: Burak")
 
     if st.button("Devam Et") and name.strip():
         cookies["username"] = name.strip()
@@ -44,14 +44,14 @@ HF_TOKEN   = st.secrets["HF_TOKEN"]
 
 openai_client = OpenAI(api_key=OPENAI_KEY)
 
-# ================= SESSION =================
+# ================= SESSION / CHATS =================
 if "chats" not in st.session_state:
     st.session_state.chats = {}
 
 if "active_chat" not in st.session_state:
-    chat_id = str(datetime.now().timestamp())
-    st.session_state.active_chat = chat_id
-    st.session_state.chats[chat_id] = {
+    cid = str(int(time.time()))
+    st.session_state.active_chat = cid
+    st.session_state.chats[cid] = {
         "title": "Yeni Sohbet",
         "messages": []
     }
@@ -61,17 +61,18 @@ with st.sidebar:
     st.markdown(f"👤 **{st.session_state.user_name}**")
 
     if st.button("🆕 Yeni Sohbet"):
-        chat_id = str(datetime.now().timestamp())
-        st.session_state.active_chat = chat_id
-        st.session_state.chats[chat_id] = {
+        cid = str(int(time.time()))
+        st.session_state.active_chat = cid
+        st.session_state.chats[cid] = {
             "title": "Yeni Sohbet",
             "messages": []
         }
         st.rerun()
 
     st.markdown("---")
+
     for cid, chat in st.session_state.chats.items():
-        if st.button(chat["title"], key=cid):
+        if st.button(chat["title"], key=f"chat_{cid}"):
             st.session_state.active_chat = cid
             st.rerun()
 
@@ -82,30 +83,43 @@ with st.sidebar:
         st.session_state.clear()
         st.rerun()
 
-# ================= THEME =================
-dark = True
+# ================= THEME / CSS =================
 st.markdown("""
 <style>
-.stApp { background:#0e0e0e; color:white; }
+.stApp { background:#0e0e0e; color:#fff; }
 .chat-user { background:#1c1c1c; padding:12px; border-radius:10px; margin-bottom:8px; }
 .chat-bot { background:#2a2a2a; padding:12px; border-radius:10px; margin-bottom:12px; }
+
 .image-frame {
-    width:420px;height:420px;
+    width:420px;
+    height:420px;
+    border-radius:14px;
     background:linear-gradient(90deg,#2a2a2a,#3a3a3a,#2a2a2a);
-    animation:shimmer 1.5s infinite;
-    border-radius:12px;
+    background-size:400% 400%;
+    animation: shimmer 1.4s infinite;
+    margin-bottom:10px;
 }
+
 @keyframes shimmer {
-    0%{background-position:-400px 0}
-    100%{background-position:400px 0}
+    0% {background-position:0% 50%}
+    100% {background-position:100% 50%}
+}
+
+button[kind="primary"] {
+    border-radius:50%;
+    height:42px;
 }
 </style>
 """, unsafe_allow_html=True)
 
 # ================= HELPERS =================
 def wants_image(text: str) -> bool:
-    keys = ["çiz", "oluştur", "görsel", "resim", "fotoğraf", "draw", "image"]
-    return any(k in text.lower() for k in keys)
+    triggers = [
+        "çiz", "oluştur", "görsel", "resim", "fotoğraf",
+        "draw", "image", "create image", "generate image"
+    ]
+    t = text.lower()
+    return any(k in t for k in triggers)
 
 def fix_prompt_tr(user_prompt: str) -> str:
     return f"""
@@ -136,7 +150,7 @@ def generate_image(prompt):
 
 # ================= MAIN =================
 st.title("🤖 Burak GPT")
-st.caption("Gerçek AI • Sohbet + Görsel")
+st.caption("Gerçek AI • Sohbet + Görsel • Otomatik Algılama")
 
 chat = st.session_state.chats[st.session_state.active_chat]
 
@@ -153,7 +167,7 @@ for m in chat["messages"]:
 if "input_text" not in st.session_state:
     st.session_state.input_text = ""
 
-col1, col2 = st.columns([10,1])
+col1, col2 = st.columns([12,1])
 with col1:
     user_input = st.text_input(
         "",
@@ -162,15 +176,15 @@ with col1:
         key="input_text"
     )
 with col2:
-    send = st.button("➤")
+    send = st.button("➤", type="primary")
 
 # ================= SEND =================
 if send and user_input.strip():
-    chat["messages"].append({"role":"user","content":user_input})
+    chat["messages"].append({"role": "user", "content": user_input})
 
     # otomatik başlık
     if chat["title"] == "Yeni Sohbet":
-        chat["title"] = user_input[:28]
+        chat["title"] = user_input[:30]
 
     # input temizle
     st.session_state.input_text = ""
@@ -184,17 +198,22 @@ if send and user_input.strip():
 
     # -------- CHAT --------
     else:
-        res = openai_client.responses.create(
-            model="gpt-4.1-mini",
-            input=chat["messages"]
-        )
-        chat["messages"].append({
-            "role":"assistant",
-            "content":res.output_text
-        })
+        try:
+            res = openai_client.responses.create(
+                model="gpt-4.1-mini",
+                input=chat["messages"]
+            )
+            chat["messages"].append({
+                "role": "assistant",
+                "content": res.output_text
+            })
+        except Exception:
+            chat["messages"].append({
+                "role": "assistant",
+                "content": "⚠️ Şu an yoğunluk var, tekrar dene."
+            })
 
-    # ===== PANEL HOOK =====
-    # burada senin admin / analytics paneline log atacağız
+    # ===== PANEL / LOG HOOK =====
     # log_event(user, chat_id, message, type)
 
     st.rerun()
