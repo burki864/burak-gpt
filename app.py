@@ -1,5 +1,5 @@
 import streamlit as st
-import os, json, time
+import requests
 from datetime import datetime
 from PIL import Image
 from openai import OpenAI
@@ -17,20 +17,50 @@ st.set_page_config(
 # ================= COOKIES =================
 cookies = EncryptedCookieManager(
     prefix="burakgpt_",
-    password=st.secrets.get("COOKIE_SECRET", "BURAK_GPT_SECRET")
+    password=st.secrets["COOKIE_SECRET"]
 )
 if not cookies.ready():
     st.stop()
 
-# ================= LOGIN (KALICI) =================
+# ================= API =================
+OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
+HF_TOKEN   = st.secrets["HF_TOKEN"]
+PANEL_API  = st.secrets["PANEL_API"]
+PANEL_KEY  = st.secrets["PANEL_KEY"]
+
+openai_client = OpenAI(api_key=OPENAI_KEY)
+
+# ================= BAN CHECK =================
+def is_banned(username):
+    try:
+        r = requests.get(
+            f"{PANEL_API}/api/ban-check",
+            params={"username": username},
+            headers={"Authorization": f"Bearer {PANEL_KEY}"},
+            timeout=5
+        )
+        return r.json().get("banned", False)
+    except:
+        return False
+
+# ================= LOGIN =================
 if "user_name" not in st.session_state:
     st.session_state.user_name = cookies.get("username")
 
+if st.session_state.user_name:
+    if is_banned(st.session_state.user_name):
+        st.error("🚫 Hesabınız yasaklanmıştır.")
+        st.stop()
+
 if not st.session_state.user_name:
     st.title("👋 Hoş Geldin")
-    name = st.text_input("Adın nedir?", placeholder="örn: Burak")
+    name = st.text_input("Adın nedir?")
 
     if st.button("Devam Et") and name.strip():
+        if is_banned(name.strip()):
+            st.error("🚫 Bu hesap banlı.")
+            st.stop()
+
         cookies["username"] = name.strip()
         cookies.save()
         st.session_state.user_name = name.strip()
@@ -38,18 +68,12 @@ if not st.session_state.user_name:
 
     st.stop()
 
-# ================= API =================
-OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
-HF_TOKEN   = st.secrets["HF_TOKEN"]
-
-openai_client = OpenAI(api_key=OPENAI_KEY)
-
-# ================= SESSION / CHATS =================
+# ================= SESSION =================
 if "chats" not in st.session_state:
     st.session_state.chats = {}
 
 if "active_chat" not in st.session_state:
-    cid = str(int(time.time()))
+    cid = str(datetime.now().timestamp())
     st.session_state.active_chat = cid
     st.session_state.chats[cid] = {
         "title": "Yeni Sohbet",
@@ -61,7 +85,7 @@ with st.sidebar:
     st.markdown(f"👤 **{st.session_state.user_name}**")
 
     if st.button("🆕 Yeni Sohbet"):
-        cid = str(int(time.time()))
+        cid = str(datetime.now().timestamp())
         st.session_state.active_chat = cid
         st.session_state.chats[cid] = {
             "title": "Yeni Sohbet",
@@ -70,9 +94,8 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("---")
-
     for cid, chat in st.session_state.chats.items():
-        if st.button(chat["title"], key=f"chat_{cid}"):
+        if st.button(chat["title"], key=cid):
             st.session_state.active_chat = cid
             st.rerun()
 
@@ -83,66 +106,49 @@ with st.sidebar:
         st.session_state.clear()
         st.rerun()
 
-# ================= THEME / CSS =================
+# ================= STYLE =================
 st.markdown("""
 <style>
-.stApp { background:#0e0e0e; color:#fff; }
+.stApp { background:#0e0e0e; color:white; }
 .chat-user { background:#1c1c1c; padding:12px; border-radius:10px; margin-bottom:8px; }
 .chat-bot { background:#2a2a2a; padding:12px; border-radius:10px; margin-bottom:12px; }
-
 .image-frame {
-    width:420px;
-    height:420px;
-    border-radius:14px;
+    width:420px;height:420px;
     background:linear-gradient(90deg,#2a2a2a,#3a3a3a,#2a2a2a);
-    background-size:400% 400%;
-    animation: shimmer 1.4s infinite;
-    margin-bottom:10px;
+    animation:shimmer 1.4s infinite;
+    border-radius:14px;
 }
-
 @keyframes shimmer {
-    0% {background-position:0% 50%}
-    100% {background-position:100% 50%}
-}
-
-button[kind="primary"] {
-    border-radius:50%;
-    height:42px;
+    0%{background-position:-400px 0}
+    100%{background-position:400px 0}
 }
 </style>
 """, unsafe_allow_html=True)
 
 # ================= HELPERS =================
-def wants_image(text: str) -> bool:
-    triggers = [
-        "çiz", "oluştur", "görsel", "resim", "fotoğraf",
-        "draw", "image", "create image", "generate image"
-    ]
-    t = text.lower()
-    return any(k in t for k in triggers)
+def wants_image(text):
+    keys = ["çiz", "oluştur", "görsel", "resim", "fotoğraf", "image", "draw"]
+    return any(k in text.lower() for k in keys)
 
-def fix_prompt_tr(user_prompt: str) -> str:
+def fix_prompt_tr(prompt):
     return f"""
-Ultra realistic high quality photograph.
+Ultra realistic photograph.
 
 Subject:
-{user_prompt}
+{prompt}
 
 Style:
 photorealistic, correct anatomy, natural proportions,
 DSLR photo, cinematic lighting, realistic textures.
 
-Negative prompt:
-cartoon, anime, illustration, fantasy, surreal,
+Negative:
+cartoon, anime, illustration, fantasy,
 deformed, extra limbs, bad anatomy,
 low quality, blurry, watermark, text
 """
 
 def generate_image(prompt):
-    client = Client(
-        "burak12321/burak-gpt-image",
-        hf_token=HF_TOKEN
-    )
+    client = Client("burak12321/burak-gpt-image", hf_token=HF_TOKEN)
     result = client.predict(prompt=prompt, api_name="/predict")
     if isinstance(result, str):
         return Image.open(result)
@@ -150,7 +156,7 @@ def generate_image(prompt):
 
 # ================= MAIN =================
 st.title("🤖 Burak GPT")
-st.caption("Gerçek AI • Sohbet + Görsel • Otomatik Algılama")
+st.caption("Gerçek Yapay Zeka • Sohbet + Görsel")
 
 chat = st.session_state.chats[st.session_state.active_chat]
 
@@ -167,36 +173,31 @@ for m in chat["messages"]:
 if "input_text" not in st.session_state:
     st.session_state.input_text = ""
 
-col1, col2 = st.columns([12,1])
-with col1:
+c1, c2 = st.columns([10,1])
+with c1:
     user_input = st.text_input(
         "",
         placeholder="Bir şey yaz veya görsel iste…",
         label_visibility="collapsed",
         key="input_text"
     )
-with col2:
-    send = st.button("➤", type="primary")
+with c2:
+    send = st.button("➤")
 
 # ================= SEND =================
 if send and user_input.strip():
-    chat["messages"].append({"role": "user", "content": user_input})
+    chat["messages"].append({"role":"user","content":user_input})
 
-    # otomatik başlık
     if chat["title"] == "Yeni Sohbet":
         chat["title"] = user_input[:30]
 
-    # input temizle
     st.session_state.input_text = ""
 
-    # -------- IMAGE --------
     if wants_image(user_input):
         st.markdown("<div class='image-frame'></div>", unsafe_allow_html=True)
         img = generate_image(fix_prompt_tr(user_input))
         if img:
             st.image(img, width=420)
-
-    # -------- CHAT --------
     else:
         try:
             res = openai_client.responses.create(
@@ -204,16 +205,13 @@ if send and user_input.strip():
                 input=chat["messages"]
             )
             chat["messages"].append({
-                "role": "assistant",
-                "content": res.output_text
+                "role":"assistant",
+                "content":res.output_text
             })
-        except Exception:
+        except:
             chat["messages"].append({
-                "role": "assistant",
-                "content": "⚠️ Şu an yoğunluk var, tekrar dene."
+                "role":"assistant",
+                "content":"⚠️ Sistem yoğun, biraz sonra tekrar dene."
             })
-
-    # ===== PANEL / LOG HOOK =====
-    # log_event(user, chat_id, message, type)
 
     st.rerun()
