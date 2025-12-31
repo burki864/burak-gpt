@@ -133,10 +133,7 @@ low quality, blurry, watermark, text
 # ---------------- IMAGE (HF SPACE - DOĞRU YOL) ----------------
 def generate_image(prompt):
     try:
-        client = Client(
-            "burak12321/burak-gpt-image",
-            hf_token=HF_TOKEN
-        )
+        client = Client("burak12321/burak-gpt-image")
 
         result = client.predict(
             prompt=prompt,
