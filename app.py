@@ -6,7 +6,7 @@ from openai import OpenAI
 from gradio_client import Client
 from streamlit_cookies_manager import EncryptedCookieManager
 
-# ---------------- PAGE ----------------
+# ================= PAGE =================
 st.set_page_config(
     page_title="Burak GPT",
     page_icon="🤖",
@@ -14,19 +14,18 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ---------------- COOKIES (LOGIN) ----------------
+# ================= COOKIES =================
 cookies = EncryptedCookieManager(
     prefix="burakgpt_",
     password="CHANGE_THIS_SECRET_123"
 )
-
 if not cookies.ready():
     st.stop()
 
+# ================= LOGIN =================
 if "user_name" not in st.session_state:
     st.session_state.user_name = cookies.get("username")
 
-# ---------------- LOGIN ----------------
 if not st.session_state.user_name:
     st.title("👋 Hoş Geldin")
     name = st.text_input("Adın nedir?")
@@ -39,73 +38,74 @@ if not st.session_state.user_name:
 
     st.stop()
 
-# ---------------- API KEYS ----------------
+# ================= API =================
 OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
 HF_TOKEN   = st.secrets["HF_TOKEN"]
 
 openai_client = OpenAI(api_key=OPENAI_KEY)
 
-# ---------------- SIDEBAR ----------------
+# ================= SESSION =================
+if "chats" not in st.session_state:
+    st.session_state.chats = {}
+
+if "active_chat" not in st.session_state:
+    chat_id = str(datetime.now().timestamp())
+    st.session_state.active_chat = chat_id
+    st.session_state.chats[chat_id] = {
+        "title": "Yeni Sohbet",
+        "messages": []
+    }
+
+# ================= SIDEBAR =================
 with st.sidebar:
     st.markdown(f"👤 **{st.session_state.user_name}**")
 
     if st.button("🆕 Yeni Sohbet"):
-        st.session_state.messages = []
+        chat_id = str(datetime.now().timestamp())
+        st.session_state.active_chat = chat_id
+        st.session_state.chats[chat_id] = {
+            "title": "Yeni Sohbet",
+            "messages": []
+        }
         st.rerun()
 
-    if st.button("🌙 / ☀️ Tema"):
-        st.session_state.dark = not st.session_state.get("dark", True)
-        st.rerun()
+    st.markdown("---")
+    for cid, chat in st.session_state.chats.items():
+        if st.button(chat["title"], key=cid):
+            st.session_state.active_chat = cid
+            st.rerun()
 
+    st.markdown("---")
     if st.button("🚪 Çıkış"):
         cookies["username"] = ""
         cookies.save()
         st.session_state.clear()
         st.rerun()
 
-# ---------------- THEME ----------------
-dark = st.session_state.get("dark", True)
-
-st.markdown(f"""
+# ================= THEME =================
+dark = True
+st.markdown("""
 <style>
-.stApp {{
-    background-color: {"#0e0e0e" if dark else "#ffffff"};
-    color: {"#ffffff" if dark else "#000000"};
-}}
-.chat-user {{
-    background: {"#1c1c1c" if dark else "#ededed"};
-    padding: 12px;
-    border-radius: 10px;
-    margin-bottom: 8px;
-}}
-.chat-bot {{
-    background: {"#2a2a2a" if dark else "#dddddd"};
-    padding: 12px;
-    border-radius: 10px;
-    margin-bottom: 12px;
-}}
-.image-frame {{
-    width: 420px;
-    height: 420px;
-    background: linear-gradient(90deg,#2a2a2a,#3a3a3a,#2a2a2a);
-    animation: shimmer 1.5s infinite;
-    border-radius: 12px;
-}}
-@keyframes shimmer {{
-    0% {{background-position: -400px 0;}}
-    100% {{background-position: 400px 0;}}
-}}
+.stApp { background:#0e0e0e; color:white; }
+.chat-user { background:#1c1c1c; padding:12px; border-radius:10px; margin-bottom:8px; }
+.chat-bot { background:#2a2a2a; padding:12px; border-radius:10px; margin-bottom:12px; }
+.image-frame {
+    width:420px;height:420px;
+    background:linear-gradient(90deg,#2a2a2a,#3a3a3a,#2a2a2a);
+    animation:shimmer 1.5s infinite;
+    border-radius:12px;
+}
+@keyframes shimmer {
+    0%{background-position:-400px 0}
+    100%{background-position:400px 0}
+}
 </style>
 """, unsafe_allow_html=True)
 
-# ---------------- SESSION ----------------
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-# ---------------- HELPERS ----------------
+# ================= HELPERS =================
 def wants_image(text: str) -> bool:
-    triggers = ["çiz", "oluştur", "resim", "görsel", "fotoğraf", "draw", "image"]
-    return any(t in text.lower() for t in triggers)
+    keys = ["çiz", "oluştur", "görsel", "resim", "fotoğraf", "draw", "image"]
+    return any(k in text.lower() for k in keys)
 
 def fix_prompt_tr(user_prompt: str) -> str:
     return f"""
@@ -115,37 +115,33 @@ Subject:
 {user_prompt}
 
 Style:
-photorealistic, real world proportions, correct anatomy,
-natural lighting, DSLR photo, sharp focus, realistic textures.
+photorealistic, correct anatomy, natural proportions,
+DSLR photo, cinematic lighting, realistic textures.
 
 Negative prompt:
 cartoon, anime, illustration, fantasy, surreal,
-distorted, deformed, extra limbs, bad anatomy,
+deformed, extra limbs, bad anatomy,
 low quality, blurry, watermark, text
 """
 
 def generate_image(prompt):
-    client = Client("burak12321/burak-gpt-image")
-
-    result = client.predict(
-        prompt=prompt,
-        api_name="/predict"
+    client = Client(
+        "burak12321/burak-gpt-image",
+        hf_token=HF_TOKEN
     )
-
+    result = client.predict(prompt=prompt, api_name="/predict")
     if isinstance(result, str):
         return Image.open(result)
+    return result
 
-    if isinstance(result, Image.Image):
-        return result
-
-    return None
-
-# ---------------- MAIN ----------------
+# ================= MAIN =================
 st.title("🤖 Burak GPT")
-st.caption("Gerçekçi AI • Sohbet + Görsel")
+st.caption("Gerçek AI • Sohbet + Görsel")
 
-# ---------------- CHAT HISTORY ----------------
-for m in st.session_state.messages:
+chat = st.session_state.chats[st.session_state.active_chat]
+
+# ================= CHAT VIEW =================
+for m in chat["messages"]:
     cls = "chat-user" if m["role"] == "user" else "chat-bot"
     name = "Sen" if m["role"] == "user" else "Burak GPT"
     st.markdown(
@@ -153,38 +149,52 @@ for m in st.session_state.messages:
         unsafe_allow_html=True
     )
 
-# ---------------- INPUT ----------------
-user_input = st.text_input(
-    "",
-    placeholder="Bir şey yaz veya görsel iste…",
-    label_visibility="collapsed"
-)
+# ================= INPUT =================
+if "input_text" not in st.session_state:
+    st.session_state.input_text = ""
 
-send = st.button("➤")
+col1, col2 = st.columns([10,1])
+with col1:
+    user_input = st.text_input(
+        "",
+        placeholder="Bir şey yaz veya görsel iste…",
+        label_visibility="collapsed",
+        key="input_text"
+    )
+with col2:
+    send = st.button("➤")
 
+# ================= SEND =================
 if send and user_input.strip():
-    st.session_state.messages.append({
-        "role": "user",
-        "content": user_input
-    })
+    chat["messages"].append({"role":"user","content":user_input})
 
-    # -------- IMAGE AUTO MODE --------
+    # otomatik başlık
+    if chat["title"] == "Yeni Sohbet":
+        chat["title"] = user_input[:28]
+
+    # input temizle
+    st.session_state.input_text = ""
+
+    # -------- IMAGE --------
     if wants_image(user_input):
         st.markdown("<div class='image-frame'></div>", unsafe_allow_html=True)
-        prompt = fix_prompt_tr(user_input)
-        img = generate_image(prompt)
+        img = generate_image(fix_prompt_tr(user_input))
         if img:
             st.image(img, width=420)
 
-    # -------- CHAT MODE --------
+    # -------- CHAT --------
     else:
         res = openai_client.responses.create(
             model="gpt-4.1-mini",
-            input=st.session_state.messages
+            input=chat["messages"]
         )
-        st.session_state.messages.append({
-            "role": "assistant",
-            "content": res.output_text
+        chat["messages"].append({
+            "role":"assistant",
+            "content":res.output_text
         })
+
+    # ===== PANEL HOOK =====
+    # burada senin admin / analytics paneline log atacağız
+    # log_event(user, chat_id, message, type)
 
     st.rerun()
