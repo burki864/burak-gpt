@@ -146,11 +146,10 @@ Negative prompt:
 cartoon, anime, illustration, low quality, watermark
 """
 
+os.environ["HF_TOKEN"] = st.secrets["HF_TOKEN"]
+
 def generate_image(prompt):
-    client = Client(
-        "burak12321/burak-gpt-image",
-        hf_token=st.secrets["HF_TOKEN"]
-    )
+    client = Client("burak12321/burak-gpt-image")
     return client.predict(prompt)
 
 # ================= SIDEBAR =================
