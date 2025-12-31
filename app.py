@@ -1,126 +1,193 @@
 import streamlit as st
-import json
-import uuid
+import os, json
 from datetime import datetime
+from PIL import Image
 from openai import OpenAI
+from gradio_client import Client
+from streamlit_cookies_manager import EncryptedCookieManager
 
-# ---------------- CONFIG ----------------
+# ---------------- PAGE ----------------
 st.set_page_config(
     page_title="Burak GPT",
     page_icon="🤖",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-DATA_FILE = "chats.json"
-client = OpenAI()
+# ---------------- COOKIES (LOGIN) ----------------
+cookies = EncryptedCookieManager(
+    prefix="burakgpt_",
+    password="CHANGE_THIS_SECRET_123"
+)
 
-# ---------------- STORAGE ----------------
-def load_chats():
-    try:
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except:
-        return {}
+if not cookies.ready():
+    st.stop()
 
-def save_chats(data):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+if "user_name" not in st.session_state:
+    st.session_state.user_name = cookies.get("username")
 
-# ---------------- SESSION ----------------
-if "chats" not in st.session_state:
-    st.session_state.chats = load_chats()
+# ---------------- LOGIN ----------------
+if not st.session_state.user_name:
+    st.title("👋 Hoş Geldin")
+    name = st.text_input("Adın nedir?")
 
-if "chat_id" not in st.session_state:
-    st.session_state.chat_id = None
+    if st.button("Devam Et") and name.strip():
+        cookies["username"] = name.strip()
+        cookies.save()
+        st.session_state.user_name = name.strip()
+        st.rerun()
 
-if "mode" not in st.session_state:
-    st.session_state.mode = "chat"
+    st.stop()
 
-if "sending" not in st.session_state:
-    st.session_state.sending = False
+# ---------------- API KEYS ----------------
+OPENAI_KEY = st.secrets["OPENAI_API_KEY"]
+HF_TOKEN   = st.secrets["HF_TOKEN"]
 
-# ---------------- NEW CHAT ----------------
-def new_chat():
-    cid = str(uuid.uuid4())
-    st.session_state.chats[cid] = {
-        "title": "Yeni Sohbet",
-        "created": datetime.now().isoformat(),
-        "messages": []
-    }
-    st.session_state.chat_id = cid
-    save_chats(st.session_state.chats)
-
-if st.session_state.chat_id is None:
-    new_chat()
-
-chat = st.session_state.chats[st.session_state.chat_id]
+openai_client = OpenAI(api_key=OPENAI_KEY)
 
 # ---------------- SIDEBAR ----------------
 with st.sidebar:
-    st.title("💬 Sohbetler")
+    st.markdown(f"👤 **{st.session_state.user_name}**")
 
-    if st.button("➕ Yeni Sohbet", use_container_width=True):
-        new_chat()
+    if st.button("🆕 Yeni Sohbet"):
+        st.session_state.messages = []
         st.rerun()
 
-    st.divider()
+    if st.button("🌙 / ☀️ Tema"):
+        st.session_state.dark = not st.session_state.get("dark", True)
+        st.rerun()
 
-    for cid, c in st.session_state.chats.items():
-        if st.button(c["title"], key=cid, use_container_width=True):
-            st.session_state.chat_id = cid
-            st.rerun()
+    if st.button("🚪 Çıkış"):
+        cookies["username"] = ""
+        cookies.save()
+        st.session_state.clear()
+        st.rerun()
 
-    st.divider()
-    st.radio("Mod", ["chat", "image"], key="mode")
+# ---------------- THEME ----------------
+dark = st.session_state.get("dark", True)
 
-# ---------------- CHAT UI ----------------
-for m in chat["messages"]:
-    with st.chat_message(m["role"]):
-        st.markdown(m["content"])
+st.markdown(f"""
+<style>
+.stApp {{
+    background-color: {"#0e0e0e" if dark else "#ffffff"};
+    color: {"#ffffff" if dark else "#000000"};
+}}
+.chat-user {{
+    background: {"#1c1c1c" if dark else "#ededed"};
+    padding: 12px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+}}
+.chat-bot {{
+    background: {"#2a2a2a" if dark else "#dddddd"};
+    padding: 12px;
+    border-radius: 10px;
+    margin-bottom: 12px;
+}}
+.image-frame {{
+    width: 420px;
+    height: 420px;
+    background: linear-gradient(90deg,#2a2a2a,#3a3a3a,#2a2a2a);
+    animation: shimmer 1.5s infinite;
+    border-radius: 12px;
+}}
+@keyframes shimmer {{
+    0% {{background-position: -400px 0;}}
+    100% {{background-position: 400px 0;}}
+}}
+</style>
+""", unsafe_allow_html=True)
 
-# ---------------- INPUT BAR ----------------
-col_img, col_input, col_send = st.columns([1, 8, 1])
+# ---------------- SESSION ----------------
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-with col_img:
-    img_btn = st.button("🖼️")
+# ---------------- HELPERS ----------------
+def wants_image(text: str) -> bool:
+    triggers = ["çiz", "oluştur", "resim", "görsel", "fotoğraf", "draw", "image"]
+    return any(t in text.lower() for t in triggers)
 
-with col_input:
-    user_input = st.text_input(
-        "",
-        placeholder="Bir şey yaz...",
-        label_visibility="collapsed"
+def fix_prompt_tr(user_prompt: str) -> str:
+    return f"""
+Ultra realistic high quality photograph.
+
+Subject:
+{user_prompt}
+
+Style:
+photorealistic, real world proportions, correct anatomy,
+natural lighting, DSLR photo, sharp focus, realistic textures.
+
+Negative prompt:
+cartoon, anime, illustration, fantasy, surreal,
+distorted, deformed, extra limbs, bad anatomy,
+low quality, blurry, watermark, text
+"""
+
+def generate_image(prompt):
+    client = Client(
+        "burak12321/burak-gpt-image",
+        hf_token=HF_TOKEN
     )
 
-with col_send:
-    send_btn = st.button("⬆️")
+    result = client.predict(
+        prompt=prompt,
+        api_name="/predict"
+    )
 
-# ---------------- SEND LOGIC ----------------
-if send_btn and user_input and not st.session_state.sending:
-    st.session_state.sending = True
+    if isinstance(result, str):
+        return Image.open(result)
 
-    chat["messages"].append({
+    if isinstance(result, Image.Image):
+        return result
+
+    return None
+
+# ---------------- MAIN ----------------
+st.title("🤖 Burak GPT")
+st.caption("Gerçekçi AI • Sohbet + Görsel")
+
+# ---------------- CHAT HISTORY ----------------
+for m in st.session_state.messages:
+    cls = "chat-user" if m["role"] == "user" else "chat-bot"
+    name = "Sen" if m["role"] == "user" else "Burak GPT"
+    st.markdown(
+        f"<div class='{cls}'><b>{name}:</b> {m['content']}</div>",
+        unsafe_allow_html=True
+    )
+
+# ---------------- INPUT ----------------
+user_input = st.text_input(
+    "",
+    placeholder="Bir şey yaz veya görsel iste…",
+    label_visibility="collapsed"
+)
+
+send = st.button("➤")
+
+if send and user_input.strip():
+    st.session_state.messages.append({
         "role": "user",
         "content": user_input
     })
 
-    if chat["title"] == "Yeni Sohbet":
-        chat["title"] = user_input[:30]
+    # -------- IMAGE AUTO MODE --------
+    if wants_image(user_input):
+        st.markdown("<div class='image-frame'></div>", unsafe_allow_html=True)
+        prompt = fix_prompt_tr(user_input)
+        img = generate_image(prompt)
+        if img:
+            st.image(img, width=420)
 
-    if st.session_state.mode == "chat":
-        res = client.responses.create(
-            model="gpt-4.1-mini",
-            input=user_input
-        )
-        reply = res.output_text
-
+    # -------- CHAT MODE --------
     else:
-        reply = "🖼️ Görsel modu aktif (image pipeline buraya bağlanır)"
+        res = openai_client.responses.create(
+            model="gpt-4.1-mini",
+            input=st.session_state.messages
+        )
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": res.output_text
+        })
 
-    chat["messages"].append({
-        "role": "assistant",
-        "content": reply
-    })
-
-    save_chats(st.session_state.chats)
-    st.session_state.sending = False
     st.rerun()
