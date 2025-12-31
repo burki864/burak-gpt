@@ -1,7 +1,6 @@
 import streamlit as st
 import os, json
 from datetime import datetime
-from PIL import Image
 from openai import OpenAI
 from gradio_client import Client
 from streamlit_cookies_manager import EncryptedCookieManager
@@ -61,9 +60,9 @@ def load_users():
     with open(USERS_FILE, "r") as f:
         return json.load(f)
 
-def save_users(u):
+def save_users(data):
     with open(USERS_FILE, "w") as f:
-        json.dump(u, f, indent=2)
+        json.dump(data, f, indent=2)
 
 users = load_users()
 
@@ -76,12 +75,13 @@ if not st.session_state.user:
     name = st.text_input("Adın nedir?")
 
     if st.button("Devam") and name.strip():
-        st.session_state.user = name.strip()
-        cookies["user"] = name.strip()
+        username = name.strip()
+        st.session_state.user = username
+        cookies["user"] = username
         cookies.save()
 
-        if name not in users:
-            users[name] = {
+        if username not in users:
+            users[username] = {
                 "banned": False,
                 "deleted": False,
                 "last_seen": None
@@ -89,17 +89,16 @@ if not st.session_state.user:
             save_users(users)
 
         st.rerun()
-
     st.stop()
 
 # ================= USER CHECK =================
 user = st.session_state.user
-info = users.get(user)
 
-if not info:
+if user not in users:
     users[user] = {"banned": False, "deleted": False, "last_seen": None}
     save_users(users)
-    info = users[user]
+
+info = users[user]
 
 if info.get("deleted"):
     st.error("❌ Hesabın devre dışı bırakıldı")
@@ -120,14 +119,10 @@ openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 if "chat" not in st.session_state:
     st.session_state.chat = []
 
-if "input_text" not in st.session_state:
-    st.session_state.input_text = ""
-
 # ================= HELPERS =================
-def wants_image(t: str) -> bool:
-    return any(k in t.lower() for k in [
-        "çiz", "resim", "görsel", "image", "draw", "foto"
-    ])
+def wants_image(text: str) -> bool:
+    keys = ["çiz", "resim", "görsel", "image", "draw", "foto"]
+    return any(k in text.lower() for k in keys)
 
 def clean_image_prompt(p: str) -> str:
     return f"""
@@ -138,19 +133,20 @@ Subject:
 
 Style:
 photorealistic, correct anatomy, cinematic lighting,
-DSLR, realistic textures, ultra detail.
+DSLR photo, natural colors, ultra detail.
 
 Negative prompt:
-cartoon, anime, illustration, deformed,
-extra limbs, bad anatomy, blurry, watermark, text
+cartoon, anime, illustration, fantasy,
+deformed, extra limbs, bad anatomy,
+low quality, blurry, watermark, text
 """
 
 def generate_image(prompt):
-    c = Client(
+    client = Client(
         "burak12321/burak-gpt-image",
         hf_token=st.secrets["HF_TOKEN"]
     )
-    return c.predict(prompt=prompt, api_name="/predict")
+    return client.predict(prompt=prompt, api_name="/predict")
 
 # ================= SIDEBAR =================
 with st.sidebar:
@@ -163,10 +159,9 @@ with st.sidebar:
     st.markdown("---")
 
     if user == "Burak":
-        ADMIN_URL = "https://burak-gpt-adm1n.streamlit.app"
         st.markdown(
-            f"""
-            <a href="{ADMIN_URL}" target="_blank">
+            """
+            <a href="https://burak-gpt-adm1n.streamlit.app" target="_blank">
             <button style="width:100%;padding:10px;border-radius:8px;">
             🛠️ Admin Panel
             </button>
@@ -189,14 +184,13 @@ for m in st.session_state.chat:
     )
 
 # ================= INPUT =================
-col1, col2 = st.columns([10,1])
+col1, col2 = st.columns([10, 1])
 
 with col1:
     txt = st.text_input(
         "",
         placeholder="Bir şey yaz veya görsel iste…",
-        label_visibility="collapsed",
-        key="input_text"
+        label_visibility="collapsed"
     )
 
 with col2:
@@ -204,8 +198,10 @@ with col2:
 
 # ================= SEND =================
 if send and txt.strip():
-    st.session_state.chat.append({"role": "user", "content": txt})
-    st.session_state.input_text = ""
+    st.session_state.chat.append({
+        "role": "user",
+        "content": txt
+    })
 
     if wants_image(txt):
         st.info("🎨 Görsel oluşturuluyor…")
