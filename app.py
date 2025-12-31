@@ -1,15 +1,21 @@
 import streamlit as st
-import os, json
 from datetime import datetime
 from openai import OpenAI
 from gradio_client import Client
 from streamlit_cookies_manager import EncryptedCookieManager
+from supabase import create_client
 
 # ================= PAGE =================
 st.set_page_config(
     page_title="Burak GPT",
     page_icon="🤖",
     layout="wide"
+)
+
+# ================= SUPABASE =================
+supabase = create_client(
+    st.secrets["SUPABASE_URL"],
+    st.secrets["SUPABASE_KEY"]
 )
 
 # ================= THEME =================
@@ -51,21 +57,6 @@ cookies = EncryptedCookieManager(
 if not cookies.ready():
     st.stop()
 
-# ================= USERS =================
-USERS_FILE = "users.json"
-
-def load_users():
-    if not os.path.exists(USERS_FILE):
-        return {}
-    with open(USERS_FILE, "r") as f:
-        return json.load(f)
-
-def save_users(data):
-    with open(USERS_FILE, "w") as f:
-        json.dump(data, f, indent=2)
-
-users = load_users()
-
 # ================= LOGIN =================
 if "user" not in st.session_state:
     st.session_state.user = cookies.get("user")
@@ -80,37 +71,41 @@ if not st.session_state.user:
         cookies["user"] = username
         cookies.save()
 
-        if username not in users:
-            users[username] = {
-                "banned": False,
-                "deleted": False,
-                "last_seen": None
-            }
-            save_users(users)
+        supabase.table("users").upsert({
+            "username": username,
+            "banned": False,
+            "deleted": False,
+            "is_online": True,
+            "last_seen": datetime.utcnow().isoformat()
+        }).execute()
 
         st.rerun()
     st.stop()
 
-# ================= USER CHECK =================
 user = st.session_state.user
 
-if user not in users:
-    users[user] = {"banned": False, "deleted": False, "last_seen": None}
-    save_users(users)
+# ================= USER CHECK =================
+res = supabase.table("users").select("*").eq("username", user).single().execute()
 
-info = users[user]
-
-if info.get("deleted"):
-    st.error("❌ Hesabın devre dışı bırakıldı")
+if not res.data:
+    st.error("Kullanıcı bulunamadı")
     st.stop()
 
-if info.get("banned"):
+info = res.data
+
+if info["deleted"]:
+    st.error("❌ Hesabın devre dışı")
+    st.stop()
+
+if info["banned"]:
     st.error("🚫 Hesabın banlandı")
     st.stop()
 
-# ================= ONLINE TRACK =================
-users[user]["last_seen"] = datetime.utcnow().isoformat()
-save_users(users)
+# ================= ONLINE UPDATE =================
+supabase.table("users").update({
+    "is_online": True,
+    "last_seen": datetime.utcnow().isoformat()
+}).eq("username", user).execute()
 
 # ================= API =================
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
@@ -120,11 +115,10 @@ if "chat" not in st.session_state:
     st.session_state.chat = []
 
 # ================= HELPERS =================
-def wants_image(text: str) -> bool:
-    keys = ["çiz", "resim", "görsel", "image", "draw", "foto"]
-    return any(k in text.lower() for k in keys)
+def wants_image(text):
+    return any(k in text.lower() for k in ["çiz", "resim", "görsel", "image", "foto"])
 
-def clean_image_prompt(p: str) -> str:
+def clean_image_prompt(p):
     return f"""
 Ultra realistic high quality photograph.
 
@@ -132,13 +126,10 @@ Subject:
 {p}
 
 Style:
-photorealistic, correct anatomy, cinematic lighting,
-DSLR photo, natural colors, ultra detail.
+photorealistic, cinematic lighting, ultra detail.
 
 Negative prompt:
-cartoon, anime, illustration, fantasy,
-deformed, extra limbs, bad anatomy,
-low quality, blurry, watermark, text
+cartoon, anime, illustration, low quality, watermark
 """
 
 def generate_image(prompt):
@@ -152,29 +143,23 @@ def generate_image(prompt):
 with st.sidebar:
     st.markdown(f"👤 **{user}**")
 
-    if st.button("🌙 / ☀️ Tema Değiştir"):
+    if st.button("🌙 / ☀️ Tema"):
         st.session_state.theme = "light" if dark else "dark"
         st.rerun()
 
-    st.markdown("---")
-
     if user == "Burak":
-        st.markdown(
-            """
-            <a href="https://burak-gpt-adm1n.streamlit.app" target="_blank">
-            <button style="width:100%;padding:10px;border-radius:8px;">
-            🛠️ Admin Panel
-            </button>
-            </a>
-            """,
-            unsafe_allow_html=True
-        )
+        st.markdown("""
+        <a href="https://burak-gpt-adm1n.streamlit.app" target="_blank">
+        <button style="width:100%;padding:10px;border-radius:8px;">
+        🛠️ Admin Panel
+        </button>
+        </a>
+        """, unsafe_allow_html=True)
 
 # ================= MAIN =================
 st.title("🤖 Burak GPT")
 st.caption("Sohbet + Görsel • Gerçek AI")
 
-# ================= CHAT VIEW =================
 for m in st.session_state.chat:
     cls = "chat-user" if m["role"] == "user" else "chat-bot"
     name = "Sen" if m["role"] == "user" else "Burak GPT"
@@ -184,24 +169,14 @@ for m in st.session_state.chat:
     )
 
 # ================= INPUT =================
-col1, col2 = st.columns([10, 1])
-
-with col1:
-    txt = st.text_input(
-        "",
-        placeholder="Bir şey yaz veya görsel iste…",
-        label_visibility="collapsed"
-    )
-
-with col2:
+c1, c2 = st.columns([10,1])
+with c1:
+    txt = st.text_input("", placeholder="Bir şey yaz…", label_visibility="collapsed")
+with c2:
     send = st.button("➤")
 
-# ================= SEND =================
 if send and txt.strip():
-    st.session_state.chat.append({
-        "role": "user",
-        "content": txt
-    })
+    st.session_state.chat.append({"role": "user", "content": txt})
 
     if wants_image(txt):
         st.info("🎨 Görsel oluşturuluyor…")
