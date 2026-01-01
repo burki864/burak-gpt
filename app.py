@@ -247,10 +247,9 @@ with st.sidebar:
 
     if st.button("🖼️ Galeri"):
         st.session_state.open_gallery = True
-
-# ================= GALLERY POPUP =================
+# ================= GALLERY POPUP (STREAMLIT SAFE) =================
 if st.session_state.open_gallery:
-    with st.dialog("🖼️ Görsel Galeri"):
+    with st.expander("🖼️ Görsel Galeri", expanded=True):
         images = load_gallery(user)
 
         if not images:
@@ -261,11 +260,11 @@ if st.session_state.open_gallery:
                 with cols[i % 3]:
                     st.image(img["image_url"], use_container_width=True)
                     st.caption(img["prompt"])
-                    if st.button("❌", key=f"del_img_{img['id']}"):
+                    if st.button("❌ Sil", key=f"del_img_{img['id']}"):
                         delete_image(img["id"])
                         st.rerun()
 
-        if st.button("Kapat"):
+        if st.button("Kapat Galeri"):
             st.session_state.open_gallery = False
             st.rerun()
 
