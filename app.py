@@ -40,50 +40,42 @@ if "theme" not in st.session_state:
 dark = st.session_state.theme == "dark"
 
 # ================= STYLE =================
-st.markdown(f"""
+st.markdown("""
 <style>
-.stApp {{
-    background-color: {"#0e0e0e" if dark else "#ffffff"};
-    color: {"#ffffff" if dark else "#000000"};
-}}
-.chat-user {{
-    background: {"#1c1c1c" if dark else "#eaeaea"};
-    padding:12px;
-    border-radius:12px;
-    margin-bottom:8px;
-}}
-.chat-bot {{
-    background: {"#2a2a2a" if dark else "#dcdcdc"};
-    padding:12px;
-    border-radius:12px;
-    margin-bottom:12px;
-}}
-.ai-frame {{
-    display:inline-block;
-    padding:10px;
-    margin-top:12px;
-    border-radius:18px;
-    background: linear-gradient(135deg,#6a5acd,#00c6ff);
-}}
-</style>
-""", unsafe_allow_html=True)
+.stApp {
+    background-color: #0e0e0e;
+    color: #ffffff;
+}
+
+.chat-user {
+    background: #1c1c1c;
+    padding: 12px;
+    border-radius: 12px;
+    margin-bottom: 8px;
+}
+
+.chat-bot {
+    background: #2a2a2a;
+    padding: 12px;
+    border-radius: 12px;
+    margin-bottom: 12px;
+}
+
+/* 🔥 GÖRSEL FRAME */
 .image-frame {
     padding: 14px;
     border-radius: 22px;
-    background: linear-gradient(
-        135deg,
-        #2f2f2f,
-        #4a4a4a,
-        #2a2a2a
-    );
+    background: linear-gradient(135deg, #2f2f2f, #4a4a4a, #2a2a2a);
     box-shadow: 0 0 25px rgba(0,0,0,0.6);
     display: inline-block;
     margin-top: 14px;
 }
+
 .image-frame img {
     border-radius: 16px;
 }
-
+</style>
+""", unsafe_allow_html=True)
 # ================= COOKIES =================
 cookies = EncryptedCookieManager(
     prefix="burak_",
