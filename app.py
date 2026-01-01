@@ -5,6 +5,8 @@ import streamlit as st
 from openai import OpenAI
 from gradio_client import Client
 from streamlit_cookies_manager import EncryptedCookieManager
+from supabase import create_client
+from datetime import datetime
 
 # ================= KEEP AWAKE =================
 def keep_awake():
@@ -27,22 +29,31 @@ st.set_page_config(
 # ================= STYLE =================
 st.markdown("""
 <style>
-.stApp {
-    background-color: #0b0b0b;
-    color: #f2f2f2;
-}
-.block-container {
-    padding-top: 1rem;
-}
+.stApp { background-color:#0b0b0b; color:#f2f2f2; }
+.block-container { padding-top:1rem; }
 </style>
 """, unsafe_allow_html=True)
+
+# ================= SUPABASE =================
+supabase = create_client(
+    st.secrets["SUPABASE_URL"],
+    st.secrets["SUPABASE_KEY"]
+)
+
+def save_chat(user, role, content, type_="text"):
+    supabase.table("chats").insert({
+        "username": user,
+        "role": role,
+        "content": content,
+        "type": type_,
+        "created_at": datetime.utcnow().isoformat()
+    }).execute()
 
 # ================= COOKIES =================
 cookies = EncryptedCookieManager(
     prefix="burak_",
     password=st.secrets["COOKIE_SECRET"]
 )
-
 if not cookies.ready():
     st.stop()
 
@@ -79,20 +90,13 @@ def generate_image(prompt):
     )
     result = client.predict(
         prompt=prompt,
-        height=768,
-        width=768,
-        num_inference_steps=9,
+        height=512,
+        width=512,
+        num_inference_steps=8,
         randomize_seed=True,
         api_name="/generate_image"
     )
-
-    if isinstance(result, (list, tuple)) and result:
-        img = result[0]
-        if isinstance(img, dict) and img.get("url"):
-            return img["url"]
-        if isinstance(img, str):
-            return img
-    return None
+    return result[0] if isinstance(result, list) else None
 
 # ================= SESSION =================
 if "chat" not in st.session_state:
@@ -115,40 +119,41 @@ for m in st.session_state.chat:
 txt = st.text_input("Mesajın")
 
 if st.button("Gönder") and txt.strip():
-    # kullanıcı mesajı
-    st.session_state.chat.append({
-        "role": "user",
-        "content": txt
-    })
+    st.session_state.chat.append({"role": "user", "content": txt})
+    save_chat(user, "user", txt)
 
     if is_image_request(txt):
         img = generate_image(txt)
-
         if img:
             st.session_state.chat.append({
                 "role": "assistant",
                 "type": "image",
                 "content": img
             })
+            save_chat(user, "assistant", img, "image")
+
             st.session_state.chat.append({
                 "role": "assistant",
                 "content": "🖼️ Görsel hazır"
             })
+            save_chat(user, "assistant", "🖼️ Görsel hazır")
         else:
             st.session_state.chat.append({
                 "role": "assistant",
                 "content": "❌ Görsel üretilemedi"
             })
+            save_chat(user, "assistant", "❌ Görsel üretilemedi")
 
     else:
         res = openai_client.responses.create(
             model="gpt-4.1-mini",
             input=txt
         )
+        reply = res.output_text
         st.session_state.chat.append({
             "role": "assistant",
-            "content": res.output_text
+            "content": reply
         })
+        save_chat(user, "assistant", reply)
 
     st.rerun()
-
