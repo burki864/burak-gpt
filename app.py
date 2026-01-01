@@ -68,7 +68,6 @@ cookies = EncryptedCookieManager(
 )
 if not cookies.ready():
     st.stop()
-
 # ================= LOGIN =================
 if "user" not in st.session_state:
     st.session_state.user = cookies.get("user")
@@ -78,20 +77,21 @@ if not st.session_state.user:
     name = st.text_input("Adın nedir?")
 
     if st.button("Devam") and name.strip():
-        username = name.strip()
-
-        st.session_state.user = username
-        cookies["user"] = username
+        st.session_state.user = name.strip()
+        cookies["user"] = st.session_state.user
         cookies.save()
 
-        save_user(username)  # ✅ public.users
+        save_user(st.session_state.user)  # 👈 BURASI ZATEN VAR
 
         st.rerun()
 
     st.stop()
 
-user = st.session_state.user
+# 🔥🔥🔥 BURASI EKSİKTİ 🔥🔥🔥
+# Cookie ile gelen ama DB'de olmayanları da kaydet
+save_user(st.session_state.user)
 
+user = st.session_state.user
 # ================= API =================
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
