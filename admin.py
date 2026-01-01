@@ -27,7 +27,7 @@ if not st.session_state.admin:
 
 # ================= LOAD USERS =================
 def load_users():
-    res = supabase.from_("public.users") \
+    res = supabase.from_("users") \
         .select("*") \
         .order("created_at", desc=True) \
         .execute()
@@ -61,7 +61,7 @@ st.json({
 c1, c2, c3, c4 = st.columns(4)
 
 if c1.button("🚫 Ban"):
-    supabase.from_("public.users") \
+    supabase.from_("users") \
         .update({"banned": True}) \
         .eq("username", selected) \
         .execute()
@@ -69,7 +69,7 @@ if c1.button("🚫 Ban"):
     st.rerun()
 
 if c2.button("✅ Unban"):
-    supabase.from_("public.users") \
+    supabase.from_("users") \
         .update({"banned": False}) \
         .eq("username", selected) \
         .execute()
@@ -77,7 +77,7 @@ if c2.button("✅ Unban"):
     st.rerun()
 
 if c3.button("🧹 Soft Delete"):
-    supabase.from_("public.users") \
+    supabase.from_("users") \
         .update({"deleted": True}) \
         .eq("username", selected) \
         .execute()
@@ -85,7 +85,7 @@ if c3.button("🧹 Soft Delete"):
     st.rerun()
 
 if c4.button("♻️ Geri Aç"):
-    supabase.from_("public.users") \
+    supabase.from_("users") \
         .update({"deleted": False}) \
         .eq("username", selected) \
         .execute()
@@ -119,21 +119,21 @@ st.subheader("⚡ Hızlı Filtreler")
 c5, c6, c7 = st.columns(3)
 
 if c5.button("🚫 Sadece Banlılar"):
-    banned = supabase.from_("public.users") \
+    banned = supabase.from_("users") \
         .select("*") \
         .eq("banned", True) \
         .execute().data
     st.dataframe(banned)
 
 if c6.button("🧹 Silinenler"):
-    deleted = supabase.from_("public.users") \
+    deleted = supabase.from_("users") \
         .select("*") \
         .eq("deleted", True) \
         .execute().data
     st.dataframe(deleted)
 
 if c7.button("🟢 Online"):
-    online = supabase.from_("public.users") \
+    online = supabase.from_("users") \
         .select("*") \
         .eq("is_online", True) \
         .execute().data
