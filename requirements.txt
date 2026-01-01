@@ -5,3 +5,4 @@ gradio-client
 streamlit-cookies-manager
 supabase
 python-dotenv
+requests
