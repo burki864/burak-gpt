@@ -259,9 +259,18 @@ if st.button("Gönder") and txt.strip():
         else:
             reply = "❌ Görsel üretilemedi"
     else:
+        # 🔧 SADECE BURASI DÜZELTİLDİ
+        messages = [
+            {
+                "role": m["role"],
+                "content": [{"type": "text", "text": m["content"]}]
+            }
+            for m in st.session_state.chat
+        ]
+
         res = openai_client.responses.create(
             model="gpt-4.1-mini",
-            input=st.session_state.chat
+            input=messages
         )
         reply = res.output_text
 
