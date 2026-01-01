@@ -2,16 +2,12 @@ import streamlit as st
 from supabase import create_client
 
 # ================= PAGE =================
-st.set_page_config(
-    page_title="Admin Panel",
-    page_icon="🛠️",
-    layout="wide"
-)
+st.set_page_config("Admin Panel", "🛠️", "wide")
 
-# ================= SUPABASE (SERVICE ROLE) =================
+# ================= SUPABASE =================
 supabase = create_client(
     st.secrets["SUPABASE_URL"],
-    st.secrets["SUPABASE_SERVICE_KEY"]  # 🔥 service_role (RLS bypass)
+    st.secrets["SUPABASE_SERVICE_KEY"]  # 🔥 SERVICE ROLE
 )
 
 # ================= AUTH =================
@@ -31,14 +27,19 @@ if not st.session_state.admin:
 
 # ================= LOAD USERS =================
 def load_users():
-    res = (
-        supabase
-        .table("users")          # ⚠️ SADECE users
-        .select("*")
-        .order("created_at", desc=True)
-        .execute()
-    )
-    return res.data or []
+    try:
+        res = (
+            supabase
+            .schema("public")
+            .from_("users")
+            .select("*")
+            .execute()
+        )
+        return res.data or []
+    except Exception as e:
+        st.error("🚨 Kullanıcılar çekilemedi")
+        st.exception(e)
+        return []
 
 users = load_users()
 
@@ -49,69 +50,55 @@ if not users:
     st.stop()
 
 # ================= USER SELECT =================
-usernames = [u["username"] for u in users]
+usernames = [u.get("username", "unknown") for u in users]
 selected = st.selectbox("👤 Kullanıcı Seç", usernames)
 
-user = next(u for u in users if u["username"] == selected)
+user = next(u for u in users if u.get("username") == selected)
 
 # ================= USER INFO =================
 st.subheader("📌 Kullanıcı Bilgisi")
-st.json({
-    "username": user["username"],
-    "banned": user.get("banned"),
-    "deleted": user.get("deleted"),
-    "is_online": user.get("is_online"),
-    "last_seen": user.get("last_seen"),
-    "created_at": user.get("created_at")
-})
+st.json(user)
 
 # ================= ACTIONS =================
 c1, c2, c3, c4 = st.columns(4)
 
-if c1.button("🚫 Ban"):
-    supabase.table("users").update(
-        {"banned": True}
-    ).eq("username", selected).execute()
-    st.success("Kullanıcı banlandı")
+def update_user(data):
+    supabase.schema("public").from_("users") \
+        .update(data) \
+        .eq("username", selected) \
+        .execute()
     st.rerun()
+
+if c1.button("🚫 Ban"):
+    update_user({"banned": True})
 
 if c2.button("✅ Unban"):
-    supabase.table("users").update(
-        {"banned": False}
-    ).eq("username", selected).execute()
-    st.success("Ban kaldırıldı")
-    st.rerun()
+    update_user({"banned": False})
 
 if c3.button("🧹 Soft Delete"):
-    supabase.table("users").update(
-        {"deleted": True}
-    ).eq("username", selected).execute()
-    st.success("Kullanıcı soft delete edildi")
-    st.rerun()
+    update_user({"deleted": True})
 
 if c4.button("♻️ Geri Aç"):
-    supabase.table("users").update(
-        {"deleted": False}
-    ).eq("username", selected).execute()
-    st.success("Kullanıcı geri açıldı")
-    st.rerun()
+    update_user({"deleted": False})
 
 # ================= CHAT REPLAY =================
 st.divider()
 st.subheader("🎥 Sohbet Replay")
 
 def load_conversation(username):
-    res = (
-        supabase
-        .table("chat_logs_grouped")   # ⚠️ public. YOK
-        .select("conversation")
-        .eq("username", username)
-        .limit(1)
-        .execute()
-    )
-    if res.data:
-        return res.data[0]["conversation"]
-    return None
+    try:
+        res = (
+            supabase
+            .schema("public")
+            .from_("chat_logs_grouped")
+            .select("conversation")
+            .eq("username", username)
+            .single()
+            .execute()
+        )
+        return res.data["conversation"] if res.data else None
+    except:
+        return None
 
 conversation = load_conversation(selected)
 
@@ -121,26 +108,7 @@ if conversation:
 else:
     st.info("Bu kullanıcıya ait sohbet yok")
 
-# ================= QUICK FILTERS =================
-st.divider()
-st.subheader("⚡ Hızlı Filtreler")
-
-c5, c6, c7 = st.columns(3)
-
-if c5.button("🚫 Sadece Banlılar"):
-    data = supabase.table("users").select("*").eq("banned", True).execute().data
-    st.dataframe(data)
-
-if c6.button("🧹 Silinenler"):
-    data = supabase.table("users").select("*").eq("deleted", True).execute().data
-    st.dataframe(data)
-
-if c7.button("🟢 Online"):
-    data = supabase.table("users").select("*").eq("is_online", True).execute().data
-    st.dataframe(data)
-
 # ================= NAV =================
 st.divider()
 if st.button("⬅️ GPT’ye Dön"):
     st.switch_page("app.py")
-
