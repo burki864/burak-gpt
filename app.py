@@ -92,7 +92,6 @@ if not st.session_state.user:
     if st.button("Devam") and name.strip():
         username = name.strip()
 
-        # ❗ KULLANICI ADI KONTROLÜ
         check = supabase.table("users").select("username").eq("username", username).execute()
         if check.data:
             st.error("❌ Bu isim zaten alınmış")
@@ -172,34 +171,34 @@ def wants_image(t: str) -> bool:
 def clean_image_prompt(p: str) -> str:
     return f"""
 Ultra realistic high quality photograph.
-
-Subject:
 {p}
-
-Style:
-photorealistic, cinematic lighting, ultra detail.
-
-Negative prompt:
-cartoon, anime, illustration, watermark, low quality
+Photorealistic, cinematic lighting, ultra detail.
 """
 
 def generate_image(prompt: str, progress):
-    client = Client("mrfakename/Z-Image-Turbo")
+    client = Client(
+        "mrfakename/Z-Image-Turbo",
+        hf_token=st.secrets["HF_TOKEN"]
+    )
 
-    progress.progress(25)
-    result = client.predict(prompt)
-    progress.progress(80)
+    progress.progress(20)
 
-    # 🔒 TEMİZ VE GARANTİLİ ÇIKIŞ
-    if isinstance(result, list) and result:
-        return str(result[0])
+    result, seed = client.predict(
+        prompt=prompt,
+        height=768,
+        width=768,
+        num_inference_steps=9,
+        seed=0,
+        randomize_seed=True,
+        api_name="/generate_image"   # 🔥 KRİTİK SATIR
+    )
 
-    if isinstance(result, str):
-        return result
+    progress.progress(90)
 
-    # beklenmeyen format
+    if isinstance(result, dict) and result.get("url"):
+        return result["url"]
+
     return None
-
 
 # ================= UI =================
 st.title("🤖 Burak GPT")
@@ -249,5 +248,4 @@ if send and txt.strip():
 
     st.session_state.chat.append({"role": "assistant", "content": reply})
     save_message(user, "assistant", reply)
-
     st.rerun()
