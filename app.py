@@ -195,9 +195,22 @@ def save_message(username, role, content, conv_id):
 
 # ================= SESSION =================
 if "conversation_id" not in st.session_state:
-    st.session_state.conversation_id = create_conversation(user)
-    st.session_state.chat = []
+    saved_cid = cookies.get("conversation_id")
+
+    if saved_cid:
+        st.session_state.conversation_id = saved_cid
+        st.session_state.chat = load_messages(saved_cid)
+    else:
+        cid = create_conversation(user)
+        cookies["conversation_id"] = cid
+        cookies.save()
+
+        st.session_state.conversation_id = cid
+        st.session_state.chat = []
+
     st.session_state.last_image = None
+    st.session_state.open_gallery = False
+
 
 # ================= SIDEBAR =================
 with st.sidebar:
@@ -221,7 +234,6 @@ with st.sidebar:
         st.session_state.chat = []
         st.session_state.last_image = None
         st.rerun()
-
 # ================= UI =================
 st.title("🤖 Burak GPT")
 
