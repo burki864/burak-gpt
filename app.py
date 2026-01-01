@@ -40,34 +40,44 @@ if "theme" not in st.session_state:
 dark = st.session_state.theme == "dark"
 
 # ================= STYLE =================
-st.markdown(f"""
+st.markdown("""
 <style>
-.stApp {{
-    background-color: {"#0e0e0e" if dark else "#ffffff"};
-    color: {"#ffffff" if dark else "#000000"};
-}}
-.chat-user {{
-    background: {"#1c1c1c" if dark else "#eaeaea"};
-    padding:12px;
-    border-radius:12px;
-    margin-bottom:8px;
-}}
-.chat-bot {{
-    background: {"#2a2a2a" if dark else "#dcdcdc"};
-    padding:12px;
-    border-radius:12px;
-    margin-bottom:12px;
-}}
-.ai-frame {{
-    display:inline-block;
-    padding:10px;
-    margin-top:12px;
-    border-radius:18px;
-    background: linear-gradient(135deg,#6a5acd,#00c6ff);
-}}
+.chat-box {
+    height: 65vh;
+    overflow-y: auto;
+    padding: 12px;
+    border-radius: 12px;
+    background: #0f0f0f;
+    border: 1px solid #222;
+}
+
+.msg-user {
+    background: #1e1e1e;
+    padding: 10px 14px;
+    border-radius: 12px;
+    margin: 6px 0;
+    text-align: right;
+}
+
+.msg-bot {
+    background: #151515;
+    padding: 10px 14px;
+    border-radius: 12px;
+    margin: 6px 0;
+}
+
+.input-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: #0b0b0b;
+    padding: 14px;
+    border-top: 1px solid #222;
+    z-index: 999;
+}
 </style>
 """, unsafe_allow_html=True)
-
 # ================= COOKIES =================
 cookies = EncryptedCookieManager(
     prefix="burak_",
