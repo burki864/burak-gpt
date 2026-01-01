@@ -58,17 +58,12 @@ st.markdown(f"""
     border-radius:12px;
     margin-bottom:12px;
 }}
-input {{
-    background-color: {"#1e1e1e" if dark else "#f2f2f2"} !important;
-    color: {"#ffffff" if dark else "#000000"} !important;
-}}
 .ai-frame {{
     display:inline-block;
     padding:10px;
     margin-top:12px;
     border-radius:18px;
     background: linear-gradient(135deg,#6a5acd,#00c6ff);
-    box-shadow: 0 0 22px rgba(0,198,255,0.6);
 }}
 </style>
 """, unsafe_allow_html=True)
@@ -115,98 +110,78 @@ if not st.session_state.user:
 
 user = st.session_state.user
 
-# ================= USER CHECK =================
-res = supabase.table("users").select("*").eq("username", user).execute()
-info = res.data[0] if res.data else {"banned": False, "deleted": False}
-
-if info.get("deleted"):
-    st.error("❌ Hesabın devre dışı")
-    st.stop()
-
-if info.get("banned"):
-    st.error("🚫 Hesabın banlandı")
-    st.stop()
-
-# ================= ONLINE UPDATE =================
-supabase.table("users").update({
-    "is_online": True,
-    "last_seen": datetime.utcnow().isoformat()
-}).eq("username", user).execute()
-
 # ================= API =================
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# ================= CHAT HELPERS =================
-def save_message(username, role, content):
+# ================= CONVERSATION HELPERS =================
+def auto_title(text):
+    return " ".join(text.split()[:5]).capitalize()
+
+def create_conversation(username):
+    res = supabase.table("conversations").insert({
+        "username": username,
+        "title": "Yeni sohbet",
+        "created_at": datetime.utcnow().isoformat()
+    }).execute()
+    return res.data[0]["id"]
+
+def load_conversations(username):
+    res = supabase.table("conversations") \
+        .select("id,title") \
+        .eq("username", username) \
+        .order("created_at", desc=True) \
+        .execute()
+    return res.data or []
+
+def load_messages(conv_id):
+    res = supabase.table("chat_logs") \
+        .select("role,content") \
+        .eq("conversation_id", conv_id) \
+        .order("created_at") \
+        .execute()
+    return res.data or []
+
+def delete_conversation(conv_id):
+    supabase.table("chat_logs").delete().eq("conversation_id", conv_id).execute()
+    supabase.table("conversations").delete().eq("id", conv_id).execute()
+
+def save_message(username, role, content, conv_id):
     supabase.table("chat_logs").insert({
         "username": username,
+        "conversation_id": conv_id,
         "role": role,
-        "content": content
+        "content": content,
+        "created_at": datetime.utcnow().isoformat()
     }).execute()
 
-def load_last_messages(username, limit=20):
-    res = (
-        supabase
-        .table("chat_logs")
-        .select("role,content")
-        .eq("username", username)
-        .order("created_at", desc=True)
-        .limit(limit)
-        .execute()
-    )
-    return list(reversed(res.data)) if res.data else []
-
 # ================= SESSION =================
-if "chat" not in st.session_state:
-    st.session_state.chat = load_last_messages(user)
+if "conversation_id" not in st.session_state:
+    st.session_state.conversation_id = create_conversation(user)
+    st.session_state.chat = []
 
-if "last_image" not in st.session_state:
-    st.session_state.last_image = None
+# ================= SIDEBAR =================
+with st.sidebar:
+    st.markdown("## 💬 Sohbetler")
 
-# ================= IMAGE HELPERS =================
-def wants_image(t: str) -> bool:
-    return any(k in t.lower() for k in ["çiz", "resim", "görsel", "image", "foto"])
+    for c in load_conversations(user):
+        col1, col2 = st.columns([8,1])
+        if col1.button(c["title"], key=c["id"]):
+            st.session_state.conversation_id = c["id"]
+            st.session_state.chat = load_messages(c["id"])
+            st.rerun()
+        if col2.button("🗑️", key=f"del_{c['id']}"):
+            delete_conversation(c["id"])
+            st.rerun()
 
-def clean_image_prompt(p: str) -> str:
-    return f"""
-Ultra realistic high quality photograph.
-{p}
-Photorealistic, cinematic lighting, ultra detail.
-"""
+    st.divider()
 
-def generate_image(prompt: str, progress):
-    client = Client(
-        "mrfakename/Z-Image-Turbo",
-        token=st.secrets["HF_TOKEN"]
-    )
-
-    progress.progress(20)
-
-    result = client.predict(
-        prompt=prompt,
-        height=768,
-        width=768,
-        num_inference_steps=9,
-        seed=0,
-        randomize_seed=True,
-        api_name="/generate_image"
-    )
-
-    progress.progress(90)
-
-    # HF Space dönüşleri bazen tuple / list olur
-    if isinstance(result, (list, tuple)) and result:
-        img = result[0]
-        if isinstance(img, dict) and img.get("url"):
-            return img["url"]
-        if isinstance(img, str):
-            return img
-
-    return None
+    if st.button("➕ Yeni Sohbet"):
+        st.session_state.conversation_id = create_conversation(user)
+        st.session_state.chat = []
+        st.rerun()
 
 # ================= UI =================
 st.title("🤖 Burak GPT")
-st.caption("Sohbet + Görsel • Loglu AI")
 
 for m in st.session_state.chat:
     cls = "chat-user" if m["role"] == "user" else "chat-bot"
@@ -216,40 +191,25 @@ for m in st.session_state.chat:
         unsafe_allow_html=True
     )
 
-if st.session_state.last_image:
-    st.markdown("<div class='ai-frame'>", unsafe_allow_html=True)
-    st.image(st.session_state.last_image, width=320)
-    st.markdown("</div>", unsafe_allow_html=True)
-
 # ================= INPUT =================
-c1, c2 = st.columns([10, 1])
-with c1:
-    txt = st.text_input("", placeholder="Bir şey yaz…", label_visibility="collapsed")
-with c2:
-    send = st.button("➤")
+txt = st.text_input("Mesajın")
 
-if send and txt.strip():
+if st.button("Gönder") and txt.strip():
+    if len(st.session_state.chat) == 0:
+        supabase.table("conversations").update({
+            "title": auto_title(txt)
+        }).eq("id", st.session_state.conversation_id).execute()
+
     st.session_state.chat.append({"role": "user", "content": txt})
-    save_message(user, "user", txt)
+    save_message(user, "user", txt, st.session_state.conversation_id)
 
-    if wants_image(txt):
-        progress = st.progress(0, text="🎨 Görsel hazırlanıyor...")
-        img = generate_image(clean_image_prompt(txt), progress)
-        progress.progress(100)
-        progress.empty()
-
-        if img:
-            st.session_state.last_image = img
-            reply = "🖼️ Görsel hazır"
-        else:
-            reply = "❌ Görsel üretilemedi"
-    else:
-        res = openai_client.responses.create(
-            model="gpt-4.1-mini",
-            input=st.session_state.chat
-        )
-        reply = res.output_text
+    res = openai_client.responses.create(
+        model="gpt-4.1-mini",
+        input=st.session_state.chat
+    )
+    reply = res.output_text
 
     st.session_state.chat.append({"role": "assistant", "content": reply})
-    save_message(user, "assistant", reply)
+    save_message(user, "assistant", reply, st.session_state.conversation_id)
+
     st.rerun()
