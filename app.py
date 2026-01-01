@@ -27,60 +27,11 @@ st.set_page_config(
     layout="wide"
 )
 
-# ================= AUTO RELOAD =================
-st.markdown("""
-<script>
-setTimeout(function(){
-    window.location.reload();
-}, 2000);
-</script>
-""", unsafe_allow_html=True)
-
 # ================= SUPABASE =================
 supabase = create_client(
     st.secrets["SUPABASE_URL"],
     st.secrets["SUPABASE_KEY"]
 )
-
-# ================= THEME =================
-if "theme" not in st.session_state:
-    st.session_state.theme = "dark"
-
-dark = st.session_state.theme == "dark"
-
-# ================= STYLE =================
-st.markdown(f"""
-<style>
-.stApp {{
-    background-color: {"#0e0e0e" if dark else "#ffffff"};
-    color: {"#ffffff" if dark else "#000000"};
-}}
-.chat-user {{
-    background: {"#1c1c1c" if dark else "#eaeaea"};
-    padding:12px;
-    border-radius:12px;
-    margin-bottom:8px;
-}}
-.chat-bot {{
-    background: {"#2a2a2a" if dark else "#dcdcdc"};
-    padding:12px;
-    border-radius:12px;
-    margin-bottom:12px;
-}}
-input {{
-    background-color: {"#1e1e1e" if dark else "#f2f2f2"} !important;
-    color: {"#ffffff" if dark else "#000000"} !important;
-}}
-.ai-frame {{
-    display:inline-block;
-    padding:10px;
-    margin-top:12px;
-    border-radius:18px;
-    background: linear-gradient(135deg,#6a5acd,#00c6ff);
-    box-shadow: 0 0 22px rgba(0,198,255,0.6);
-}}
-</style>
-""", unsafe_allow_html=True)
 
 # ================= COOKIES =================
 cookies = EncryptedCookieManager(
@@ -89,50 +40,58 @@ cookies = EncryptedCookieManager(
 )
 if not cookies.ready():
     st.stop()
-# ================= LOGIN =================
+
+# ================= SESSION INIT =================
 if "user" not in st.session_state:
     st.session_state.user = cookies.get("user")
 
+# ================= LOGIN =================
 if not st.session_state.user:
     st.title("👋 Hoş Geldin")
     name = st.text_input("Adın nedir?")
 
     if st.button("Devam") and name.strip():
-        user = name.strip()
+        username = name.strip()
 
-        # 🔍 KULLANICI ADI KONTROLÜ
-        check = (
+        # 🔍 İSİM KONTROLÜ
+        exists = (
             supabase
             .table("users")
             .select("username")
-            .eq("username", user)
+            .eq("username", username)
             .execute()
         )
 
-        if check.data:
+        if exists.data:
             st.error("❌ Bu isim zaten alınmış, başka bir isim dene")
             st.stop()
 
-        # ✅ DEVAM
-        st.session_state.user = user
-        cookies["user"] = user
-        cookies.save()
-
+        # ✅ KAYIT
         supabase.table("users").insert({
-            "username": user,
+            "username": username,
             "banned": False,
             "deleted": False,
             "is_online": True,
             "last_seen": datetime.utcnow().isoformat()
         }).execute()
 
+        st.session_state.user = username
+        cookies["user"] = username
+        cookies.save()
         st.rerun()
 
     st.stop()
 
+# ================= USER GUARANTEED =================
+user = st.session_state.user
+
 # ================= USER CHECK =================
 res = supabase.table("users").select("*").eq("username", user).execute()
-info = res.data[0] if res.data else {"banned": False, "deleted": False}
+info = res.data[0] if res.data else None
+
+if not info:
+    st.error("❌ Kullanıcı bulunamadı")
+    st.stop()
 
 if info.get("deleted"):
     st.error("❌ Hesabın devre dışı")
@@ -172,7 +131,7 @@ def load_last_messages(username, limit=20):
     )
     return list(reversed(res.data)) if res.data else []
 
-# ================= SESSION =================
+# ================= SESSION CHAT =================
 if "chat" not in st.session_state:
     st.session_state.chat = load_last_messages(user)
 
@@ -186,15 +145,9 @@ def wants_image(t: str) -> bool:
 def clean_image_prompt(p: str) -> str:
     return f"""
 Ultra realistic high quality photograph.
-
-Subject:
-{p}
-
-Style:
-photorealistic, cinematic lighting, ultra detail.
-
-Negative prompt:
-cartoon, anime, illustration, watermark, low quality
+Subject: {p}
+Style: photorealistic, cinematic lighting, ultra detail.
+Negative prompt: cartoon, anime, illustration, watermark, low quality
 """
 
 def generate_image(prompt: str):
@@ -211,37 +164,17 @@ st.title("🤖 Burak GPT")
 st.caption("Sohbet + Görsel • Loglu AI")
 
 for m in st.session_state.chat:
-    cls = "chat-user" if m["role"] == "user" else "chat-bot"
-    name = "Sen" if m["role"] == "user" else "Burak GPT"
-    st.markdown(
-        f"<div class='{cls}'><b>{name}:</b> {m['content']}</div>",
-        unsafe_allow_html=True
-    )
-
-if st.session_state.last_image:
-    st.markdown("<div class='ai-frame'>", unsafe_allow_html=True)
-    st.image(st.session_state.last_image, width=320)
-    st.markdown("</div>", unsafe_allow_html=True)
+    role = "Sen" if m["role"] == "user" else "Burak GPT"
+    st.markdown(f"**{role}:** {m['content']}")
 
 # ================= INPUT =================
-c1, c2 = st.columns([10, 1])
-with c1:
-    txt = st.text_input("", placeholder="Bir şey yaz…", label_visibility="collapsed")
-with c2:
-    send = st.button("➤")
-
-if send and txt.strip():
+txt = st.text_input("Mesajın")
+if st.button("Gönder") and txt.strip():
     st.session_state.chat.append({"role": "user", "content": txt})
     save_message(user, "user", txt)
 
     if wants_image(txt):
-        st.info("🎨 Görsel oluşturuluyor...")
-        img = generate_image(clean_image_prompt(txt))
-        if img:
-            st.session_state.last_image = img
-            reply = "🖼️ Görsel hazır"
-        else:
-            reply = "❌ Görsel üretilemedi"
+        reply = "🖼️ Görsel hazır" if generate_image(clean_image_prompt(txt)) else "❌ Görsel üretilemedi"
     else:
         res = openai_client.responses.create(
             model="gpt-4.1-mini",
@@ -251,5 +184,4 @@ if send and txt.strip():
 
     st.session_state.chat.append({"role": "assistant", "content": reply})
     save_message(user, "assistant", reply)
-
     st.rerun()
