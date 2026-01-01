@@ -16,7 +16,7 @@ def keep_awake():
             requests.get("https://burakgpt.streamlit.app/")
         except:
             pass
-        time.sleep(600)  # 10 dk
+        time.sleep(600)
 
 threading.Thread(target=keep_awake, daemon=True).start()
 
@@ -27,7 +27,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# ================= AUTO RELOAD (SLEEP FIX) =================
+# ================= AUTO RELOAD =================
 st.markdown("""
 <script>
 setTimeout(function(){
@@ -140,14 +140,34 @@ supabase.table("users").update({
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 os.environ["HF_TOKEN"] = st.secrets["HF_TOKEN"]
 
+# ================= CHAT HELPERS =================
+def save_message(username, role, content):
+    supabase.table("chat_logs").insert({
+        "username": username,
+        "role": role,
+        "content": content
+    }).execute()
+
+def load_last_messages(username, limit=20):
+    res = (
+        supabase
+        .table("chat_logs")
+        .select("role,content")
+        .eq("username", username)
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return list(reversed(res.data)) if res.data else []
+
 # ================= SESSION =================
 if "chat" not in st.session_state:
-    st.session_state.chat = []
+    st.session_state.chat = load_last_messages(user)
 
 if "last_image" not in st.session_state:
     st.session_state.last_image = None
 
-# ================= HELPERS =================
+# ================= IMAGE HELPERS =================
 def wants_image(t: str) -> bool:
     return any(k in t.lower() for k in ["çiz", "resim", "görsel", "image", "foto"])
 
@@ -174,9 +194,9 @@ def generate_image(prompt: str):
         return result
     return None
 
-# ================= MAIN =================
+# ================= UI =================
 st.title("🤖 Burak GPT")
-st.caption("Sohbet + Görsel • Gerçek AI")
+st.caption("Sohbet + Görsel • Loglu AI")
 
 for m in st.session_state.chat:
     cls = "chat-user" if m["role"] == "user" else "chat-bot"
@@ -200,23 +220,24 @@ with c2:
 
 if send and txt.strip():
     st.session_state.chat.append({"role": "user", "content": txt})
+    save_message(user, "user", txt)
 
     if wants_image(txt):
         st.info("🎨 Görsel oluşturuluyor...")
         img = generate_image(clean_image_prompt(txt))
         if img:
             st.session_state.last_image = img
-            st.session_state.chat.append({"role": "assistant", "content": "🖼️ Görsel hazır"})
+            reply = "🖼️ Görsel hazır"
         else:
-            st.session_state.chat.append({"role": "assistant", "content": "❌ Görsel üretilemedi"})
+            reply = "❌ Görsel üretilemedi"
     else:
         res = openai_client.responses.create(
             model="gpt-4.1-mini",
             input=st.session_state.chat
         )
-        st.session_state.chat.append({
-            "role": "assistant",
-            "content": res.output_text
-        })
+        reply = res.output_text
+
+    st.session_state.chat.append({"role": "assistant", "content": reply})
+    save_message(user, "assistant", reply)
 
     st.rerun()
