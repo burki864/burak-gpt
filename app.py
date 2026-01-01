@@ -40,17 +40,15 @@ supabase = create_client(
     st.secrets["SUPABASE_KEY"]
 )
 
+# ================= USERS =================
 def save_user(username):
-    check = supabase.table("users") \
-        .select("id") \
-        .eq("username", username) \
-        .execute()
-
-    if not check.data:
-        supabase.table("users").insert({
-            "username": username,
-            "created_at": datetime.utcnow().isoformat()
-        }).execute()
+    supabase.table("users").upsert({
+        "username": username,
+        "banned": False,
+        "deleted": False,
+        "is_online": True,
+        "last_seen": datetime.utcnow().isoformat()
+    }, on_conflict="username").execute()
 
 def save_chat(username, role, content, type_="text"):
     supabase.table("chats").insert({
@@ -61,13 +59,15 @@ def save_chat(username, role, content, type_="text"):
         "created_at": datetime.utcnow().isoformat()
     }).execute()
 
-# ================= COOKIES (GLOBAL LOGOUT) =================
+# ================= COOKIES (🔥 GLOBAL RESET) =================
 cookies = EncryptedCookieManager(
-    prefix="burak_v2_",  # 🔥 HERKESİ ÇIKIŞA ATAR
+    prefix="burak_v3_",   # 🔥 PREFIX DEĞİŞTİ → HERKES ÇIKIŞ
     password=st.secrets["COOKIE_SECRET"]
 )
+
 if not cookies.ready():
     st.stop()
+
 # ================= LOGIN =================
 if "user" not in st.session_state:
     st.session_state.user = cookies.get("user")
@@ -81,17 +81,17 @@ if not st.session_state.user:
         cookies["user"] = st.session_state.user
         cookies.save()
 
-        save_user(st.session_state.user)  # 👈 BURASI ZATEN VAR
+        save_user(st.session_state.user)
 
         st.rerun()
 
     st.stop()
 
-# 🔥🔥🔥 BURASI EKSİKTİ 🔥🔥🔥
-# Cookie ile gelen ama DB'de olmayanları da kaydet
+# 🔁 Cookie’den gelen ama DB’de olmayanları da garanti kaydet
 save_user(st.session_state.user)
 
 user = st.session_state.user
+
 # ================= API =================
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
@@ -144,10 +144,7 @@ txt = st.text_input("Mesajın")
 
 if st.button("Gönder") and txt.strip():
     # USER
-    st.session_state.chat.append({
-        "role": "user",
-        "content": txt
-    })
+    st.session_state.chat.append({"role": "user", "content": txt})
     save_chat(user, "user", txt)
 
     # IMAGE
