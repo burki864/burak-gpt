@@ -27,7 +27,7 @@ if not st.session_state.admin:
 
 # ================= LOAD USERS =================
 def load_users():
-    res = supabase.table("users") \
+    res = supabase.table("public.users") \
         .select("*") \
         .order("created_at", desc=True) \
         .execute()
