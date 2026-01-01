@@ -7,6 +7,7 @@ from gradio_client import Client
 from streamlit_cookies_manager import EncryptedCookieManager
 from supabase import create_client
 from datetime import datetime, timezone, timedelta
+
 # ================= KEEP AWAKE =================
 def keep_awake():
     while True:
@@ -41,11 +42,8 @@ supabase = create_client(
 
 # ================= USERS =================
 def get_user(username):
-    res = supabase.table("users") \
-        .select("*") \
-        .eq("username", username) \
-        .execute()
-    return res.data[0] if res.data else None
+    r = supabase.table("users").select("*").eq("username", username).execute()
+    return r.data[0] if r.data else None
 
 def upsert_user(username):
     supabase.table("users").upsert({
@@ -73,7 +71,7 @@ def save_chat(username, role, content, type_="text"):
 
 # ================= COOKIES (GLOBAL RESET) =================
 cookies = EncryptedCookieManager(
-    prefix="burak_v4_",  # 🔥 herkes çıkış
+    prefix="burak_v4_",  # 🔥 herkes logout
     password=st.secrets["COOKIE_SECRET"]
 )
 
@@ -90,7 +88,6 @@ if not st.session_state.user:
 
     if st.button("Devam") and name.strip():
         username = name.strip()
-
         user_db = get_user(username)
 
         if user_db and user_db["deleted"]:
@@ -131,27 +128,6 @@ update_last_seen(user)
 # ================= API =================
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# ================= TIME / DATE =================
-def get_time_reply():
-    tr_time = datetime.now(timezone.utc) + timedelta(hours=3)
-
-    days_tr = {
-        "Monday": "Pazartesi",
-        "Tuesday": "Salı",
-        "Wednesday": "Çarşamba",
-        "Thursday": "Perşembe",
-        "Friday": "Cuma",
-        "Saturday": "Cumartesi",
-        "Sunday": "Pazar"
-    }
-
-    return (
-        f"⏰ Saat: **{tr_time.strftime('%H:%M')}**\n\n"
-        f"📅 Tarih: **{tr_time.strftime('%d.%m.%Y')}**\n"
-        f"📆 Gün: **{days_tr[tr_time.strftime('%A')]}**"
-    )
-
-
 # ================= IMAGE =================
 def is_image_request(text):
     keys = ["çiz", "resim", "görsel", "image", "photo", "art", "manzara"]
@@ -162,7 +138,7 @@ def generate_image(prompt):
         "mrfakename/Z-Image-Turbo",
         token=st.secrets["HF_TOKEN"]
     )
-    result = client.predict(
+    r = client.predict(
         prompt=prompt,
         height=512,
         width=512,
@@ -170,14 +146,30 @@ def generate_image(prompt):
         randomize_seed=True,
         api_name="/generate_image"
     )
-
-    if isinstance(result, (list, tuple)) and result:
-        img = result[0]
+    if isinstance(r, (list, tuple)) and r:
+        img = r[0]
         if isinstance(img, dict) and img.get("url"):
             return img["url"]
         if isinstance(img, str):
             return img
     return None
+
+# ================= TIME (TR) =================
+def get_time_reply():
+    tr = datetime.now(timezone.utc) + timedelta(hours=3)
+    days = {
+        "Monday":"Pazartesi","Tuesday":"Salı","Wednesday":"Çarşamba",
+        "Thursday":"Perşembe","Friday":"Cuma",
+        "Saturday":"Cumartesi","Sunday":"Pazar"
+    }
+    return (
+        f"⏰ Saat: **{tr.strftime('%H:%M')}**\n\n"
+        f"📅 Tarih: **{tr.strftime('%d.%m.%Y')}**\n"
+        f"📆 Gün: **{days[tr.strftime('%A')]}**"
+    )
+
+def is_time_question(t):
+    return any(k in t.lower() for k in ["saat", "kaç", "tarih", "gün"])
 
 # ================= SESSION =================
 if "chat" not in st.session_state:
@@ -186,7 +178,6 @@ if "chat" not in st.session_state:
 # ================= UI =================
 st.title(f"🤖 Burak GPT | {user}")
 
-# ===== CHAT =====
 for m in st.session_state.chat:
     if m["role"] == "user":
         st.markdown(f"**Sen:** {m['content']}")
@@ -196,59 +187,35 @@ for m in st.session_state.chat:
         else:
             st.markdown(f"**Burak GPT:** {m['content']}")
 
-# ===== INPUT =====
 txt = st.text_input("Mesajın")
 
 if st.button("Gönder") and txt.strip():
-    st.session_state.chat.append({"role": "user", "content": txt})
+    st.session_state.chat.append({"role":"user","content":txt})
     save_chat(user, "user", txt)
 
-    # ⏰ SAAT / TARİH
-    if is_time_request(txt):
+    if is_time_question(txt):
         reply = get_time_reply()
-        st.session_state.chat.append({
-            "role": "assistant",
-            "content": reply
-        })
+        st.session_state.chat.append({"role":"assistant","content":reply})
         save_chat(user, "assistant", reply)
-        st.rerun()
 
-    # 🖼️ IMAGE
-    if is_image_request(txt):
+    elif is_image_request(txt):
         img = generate_image(txt)
-
         if img:
-            st.session_state.chat.append({
-                "role": "assistant",
-                "type": "image",
-                "content": img
-            })
+            st.session_state.chat.append({"role":"assistant","type":"image","content":img})
             save_chat(user, "assistant", img, "image")
-
-            st.session_state.chat.append({
-                "role": "assistant",
-                "content": "🖼️ Görsel hazır"
-            })
+            st.session_state.chat.append({"role":"assistant","content":"🖼️ Görsel hazır"})
             save_chat(user, "assistant", "🖼️ Görsel hazır")
         else:
-            st.session_state.chat.append({
-                "role": "assistant",
-                "content": "❌ Görsel üretilemedi"
-            })
+            st.session_state.chat.append({"role":"assistant","content":"❌ Görsel üretilemedi"})
             save_chat(user, "assistant", "❌ Görsel üretilemedi")
 
-    # 💬 TEXT
     else:
-        res = openai_client.responses.create(
+        r = openai_client.responses.create(
             model="gpt-4.1-mini",
             input=txt
         )
-        reply = res.output_text
-
-        st.session_state.chat.append({
-            "role": "assistant",
-            "content": reply
-        })
+        reply = r.output_text
+        st.session_state.chat.append({"role":"assistant","content":reply})
         save_chat(user, "assistant", reply)
 
     st.rerun()
