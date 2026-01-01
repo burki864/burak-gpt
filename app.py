@@ -36,22 +36,28 @@ supabase = create_client(
 # ================= STYLE =================
 st.markdown("""
 <style>
-html, body, [class*="css"] {
+
+/* ====== SAYFA ZEMİNİ (STREAMLIT ROOT) ====== */
+.stApp {
     background: radial-gradient(circle at top, #1a1a1a, #0b0b0b);
     color: #f2f2f2;
 }
 
+/* ÜST BOŞLUKLARI TEMİZLE */
+header, footer {
+    visibility: hidden;
+}
+
 .block-container {
-    padding-top: 1rem !important;
+    padding-top: 0.8rem !important;
     padding-bottom: 0 !important;
 }
 
-/* CHAT FRAME */
+/* ====== CHAT ALANI ====== */
 .chat-box {
-    height: calc(100vh - 110px);
+    height: calc(100vh - 140px);
     overflow-y: auto;
-    padding: 20px;
-    padding-bottom: 120px;
+    padding: 20px 24px 120px 24px;
 }
 
 /* Scroll */
@@ -63,42 +69,45 @@ html, body, [class*="css"] {
     border-radius: 10px;
 }
 
-/* BALON */
+/* ====== BALONLAR ====== */
 .chat-bubble {
     max-width: 70%;
     padding: 12px 16px;
-    border-radius: 16px;
     margin-bottom: 12px;
+    border-radius: 16px;
     line-height: 1.5;
-    box-shadow: 0 4px 14px rgba(0,0,0,.35);
+    box-shadow: 0 6px 16px rgba(0,0,0,.4);
     animation: fadeIn .15s ease-in;
 }
 
+/* USER */
 .chat-bubble.user {
     background: linear-gradient(135deg, #2563eb, #1d4ed8);
     margin-left: auto;
     border-bottom-right-radius: 4px;
 }
 
+/* BOT */
 .chat-bubble.bot {
-    background: #1f1f1f;
+    background: #1e1e1e;
     margin-right: auto;
     border-bottom-left-radius: 4px;
 }
 
-/* INPUT BAR */
+/* ====== SABİT INPUT BAR ====== */
 .input-fixed {
     position: fixed;
     bottom: 0;
     left: 0;
     width: 100%;
-    background: rgba(15,15,15,.97);
-    backdrop-filter: blur(12px);
+    background: rgba(10,10,10,.97);
+    backdrop-filter: blur(10px);
     padding: 14px 24px;
     border-top: 1px solid #222;
-    z-index: 999;
+    z-index: 9999;
 }
 
+/* Input */
 .input-fixed input {
     background: #111 !important;
     color: #f2f2f2 !important;
@@ -107,6 +116,7 @@ html, body, [class*="css"] {
     padding: 10px 14px !important;
 }
 
+/* Button */
 .input-fixed button {
     background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
     color: white !important;
@@ -116,13 +126,20 @@ html, body, [class*="css"] {
     font-weight: 600;
 }
 
+/* ====== ANİMASYON ====== */
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(4px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
+
 </style>
 """, unsafe_allow_html=True)
-
 # ================= COOKIES =================
 cookies = EncryptedCookieManager(
     prefix="burak_",
