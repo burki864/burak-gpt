@@ -62,7 +62,7 @@ def save_chat(user, role, content, type_="text"):
 
 # ================= COOKIES =================
 cookies = EncryptedCookieManager(
-    prefix="burak_",
+    prefix="burak_v2",
     password=st.secrets["COOKIE_SECRET"]
 )
 if not cookies.ready():
