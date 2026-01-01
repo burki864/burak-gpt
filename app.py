@@ -154,6 +154,26 @@ def generate_image(prompt: str):
             return img
     return None
 
+# ================= GALLERY HELPERS (EKLENDİ) =================
+def save_image(username, prompt, image_url):
+    supabase.table("gallery").insert({
+        "username": username,
+        "prompt": prompt,
+        "image_url": image_url,
+        "created_at": datetime.utcnow().isoformat()
+    }).execute()
+
+def load_gallery(username):
+    res = supabase.table("gallery") \
+        .select("id,prompt,image_url") \
+        .eq("username", username) \
+        .order("created_at", desc=True) \
+        .execute()
+    return res.data or []
+
+def delete_image(img_id):
+    supabase.table("gallery").delete().eq("id", img_id).execute()
+
 # ================= CONVERSATION HELPERS =================
 def auto_title(text):
     return " ".join(text.split()[:5]).capitalize()
@@ -199,6 +219,9 @@ if "conversation_id" not in st.session_state:
     st.session_state.chat = []
     st.session_state.last_image = None
 
+if "open_gallery" not in st.session_state:
+    st.session_state.open_gallery = False
+
 # ================= SIDEBAR =================
 with st.sidebar:
     st.markdown("## 💬 Sohbetler")
@@ -221,6 +244,30 @@ with st.sidebar:
         st.session_state.chat = []
         st.session_state.last_image = None
         st.rerun()
+
+    if st.button("🖼️ Galeri"):
+        st.session_state.open_gallery = True
+
+# ================= GALLERY POPUP =================
+if st.session_state.open_gallery:
+    with st.dialog("🖼️ Görsel Galeri"):
+        images = load_gallery(user)
+
+        if not images:
+            st.info("Henüz görsel yok")
+        else:
+            cols = st.columns(3)
+            for i, img in enumerate(images):
+                with cols[i % 3]:
+                    st.image(img["image_url"], use_container_width=True)
+                    st.caption(img["prompt"])
+                    if st.button("❌", key=f"del_img_{img['id']}"):
+                        delete_image(img["id"])
+                        st.rerun()
+
+        if st.button("Kapat"):
+            st.session_state.open_gallery = False
+            st.rerun()
 
 # ================= UI =================
 st.title("🤖 Burak GPT")
@@ -255,11 +302,11 @@ if st.button("Gönder") and txt.strip():
         img = generate_image(clean_image_prompt(txt))
         if img:
             st.session_state.last_image = img
+            save_image(user, txt, img)
             reply = "🖼️ Görsel hazır"
         else:
             reply = "❌ Görsel üretilemedi"
     else:
-        # 🔧 SADECE BURASI DÜZELTİLDİ
         messages = [
             {
                 "role": m["role"],
