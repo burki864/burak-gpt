@@ -42,37 +42,41 @@ dark = st.session_state.theme == "dark"
 # ================= STYLE =================
 st.markdown("""
 <style>
-.stApp {
-    background-color: #0e0e0e;
-    color: #ffffff;
+@keyframes pulseGlow {
+    0% {
+        box-shadow: 0 0 6px rgba(180,180,180,0.2),
+                    inset 0 0 6px rgba(180,180,180,0.15);
+        opacity: 0.85;
+    }
+    50% {
+        box-shadow: 0 0 22px rgba(220,220,220,0.6),
+                    inset 0 0 12px rgba(220,220,220,0.4);
+        opacity: 1;
+    }
+    100% {
+        box-shadow: 0 0 6px rgba(180,180,180,0.2),
+                    inset 0 0 6px rgba(180,180,180,0.15);
+        opacity: 0.85;
+    }
 }
 
-.chat-user {
-    background: #1c1c1c;
-    padding: 12px;
-    border-radius: 12px;
-    margin-bottom: 8px;
-}
-
-.chat-bot {
-    background: #2a2a2a;
-    padding: 12px;
-    border-radius: 12px;
-    margin-bottom: 12px;
-}
-
-/* 🔥 GÖRSEL FRAME */
 .image-frame {
+    width: fit-content;
     padding: 14px;
-    border-radius: 22px;
-    background: linear-gradient(135deg, #2f2f2f, #4a4a4a, #2a2a2a);
-    box-shadow: 0 0 25px rgba(0,0,0,0.6);
-    display: inline-block;
+    border-radius: 10px; /* ⬅️ KAREYE YAKIN */
+    background: linear-gradient(
+        135deg,
+        #1e1e1e,
+        #3a3a3a,
+        #1e1e1e
+    );
+    animation: pulseGlow 2.2s infinite ease-in-out;
     margin-top: 14px;
 }
 
 .image-frame img {
-    border-radius: 16px;
+    border-radius: 6px;
+    display: block;
 }
 </style>
 """, unsafe_allow_html=True)
