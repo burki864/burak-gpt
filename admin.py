@@ -1,9 +1,17 @@
 import streamlit as st
 import json, os
+from supabase import create_client
 
+# ================= PAGE =================
 st.set_page_config("Admin Panel","🛠️","wide")
 
-# ---------- AUTH ----------
+# ================= SUPABASE =================
+supabase = create_client(
+    st.secrets["SUPABASE_URL"],
+    st.secrets["SUPABASE_KEY"]
+)
+
+# ================= AUTH =================
 if "admin" not in st.session_state:
     st.session_state.admin = False
 
@@ -18,7 +26,7 @@ if not st.session_state.admin:
             st.error("❌ Yetkisiz")
     st.stop()
 
-# ---------- USERS ----------
+# ================= USERS (LOCAL JSON – BOZULMADI) =================
 def load_users():
     if not os.path.exists("users.json"):
         return {}
@@ -35,12 +43,14 @@ if not users:
     st.info("Henüz kullanıcı yok")
     st.stop()
 
-user = st.selectbox("Kullanıcı", users.keys())
+# ================= USER SELECT =================
+user = st.selectbox("👤 Kullanıcı", users.keys())
 info = users[user]
 
-st.write("Durum:", info)
+st.write("📌 Durum:", info)
 
-c1,c2,c3 = st.columns(3)
+# ================= ACTION BUTTONS =================
+c1, c2, c3 = st.columns(3)
 
 if c1.button("🚫 Ban"):
     info["banned"] = True
@@ -57,5 +67,29 @@ if st.button("♻️ Geri Aç"):
 save_users(users)
 st.success("✔️ Güncellendi")
 
+# ================= CHAT REPLAY =================
+st.divider()
+st.subheader("🎥 Sohbet Replay")
+
+def load_conversation(username):
+    res = supabase.table("chat_logs_grouped") \
+        .select("conversation") \
+        .eq("username", username) \
+        .execute()
+
+    if res.data:
+        return res.data[0]["conversation"]
+    return None
+
+conversation = load_conversation(user)
+
+if conversation:
+    with st.expander("🗂️ Konuşmayı Göster / Gizle", expanded=False):
+        st.text(conversation)
+else:
+    st.info("Bu kullanıcıya ait sohbet kaydı yok")
+
+# ================= NAV =================
+st.divider()
 if st.button("⬅️ GPT’ye Dön"):
     st.switch_page("app.py")
