@@ -37,7 +37,6 @@ def load_users():
             .schema("public")
             .from_("users")
             .select("*")
-            .order("created_at", desc=True)
             .execute()
         )
         return res.data or []
