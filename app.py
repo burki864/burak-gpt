@@ -119,18 +119,16 @@ def clean_image_prompt(p):
 
 def generate_image(prompt):
     try:
-        client = Client("mrfakename/Z-Image-Turbo", token=st.secrets["HF_TOKEN"])
-        result = client.predict(
+        result = openai_client.images.generate(
+            model="gpt-image-1",
             prompt=prompt,
-            height=768,
-            width=768,
-            num_inference_steps=9,
-            randomize_seed=True,
-            api_name="/generate_image"
+            size="1024x1024"
         )
+        return result.data[0].url
+    except Exception as e:
+        print("IMAGE ERROR:", e)
+        return None
 
-        if not result:
-            return None
 
         img = result[0]
 
