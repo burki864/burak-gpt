@@ -184,7 +184,7 @@ cartoon, anime, illustration, watermark, low quality
 """
 
 def generate_image(prompt: str, progress):
-    client = Client("burak12321/burak-gpt-image")
+    client = Client("mrfakename/Z-Image-Turbo")
 
     progress.progress(25)
     result = client.predict(prompt)
