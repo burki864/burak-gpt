@@ -41,28 +41,29 @@ supabase = create_client(
 )
 
 def save_user(username):
-    existing = supabase.table("users") \
+    check = supabase.table("users") \
         .select("id") \
         .eq("username", username) \
         .execute()
 
-    if not existing.data:
+    if not check.data:
         supabase.table("users").insert({
-            "username": username
+            "username": username,
+            "created_at": datetime.utcnow().isoformat()
         }).execute()
 
-def save_chat(user, role, content, type_="text"):
+def save_chat(username, role, content, type_="text"):
     supabase.table("chats").insert({
-        "username": user,
+        "username": username,
         "role": role,
         "content": content,
         "type": type_,
         "created_at": datetime.utcnow().isoformat()
     }).execute()
 
-# ================= COOKIES =================
+# ================= COOKIES (GLOBAL LOGOUT) =================
 cookies = EncryptedCookieManager(
-    prefix="burak_v2",
+    prefix="burak_v2_",  # 🔥 HERKESİ ÇIKIŞA ATAR
     password=st.secrets["COOKIE_SECRET"]
 )
 if not cookies.ready():
@@ -77,11 +78,13 @@ if not st.session_state.user:
     name = st.text_input("Adın nedir?")
 
     if st.button("Devam") and name.strip():
-        st.session_state.user = name.strip()
-        cookies["user"] = st.session_state.user
+        username = name.strip()
+
+        st.session_state.user = username
+        cookies["user"] = username
         cookies.save()
 
-        save_user(st.session_state.user)  # 👈 USERS TABLOSUNA KAYIT
+        save_user(username)  # ✅ public.users
 
         st.rerun()
 
@@ -140,12 +143,14 @@ for m in st.session_state.chat:
 txt = st.text_input("Mesajın")
 
 if st.button("Gönder") and txt.strip():
+    # USER
     st.session_state.chat.append({
         "role": "user",
         "content": txt
     })
     save_chat(user, "user", txt)
 
+    # IMAGE
     if is_image_request(txt):
         img = generate_image(txt)
 
@@ -162,7 +167,6 @@ if st.button("Gönder") and txt.strip():
                 "content": "🖼️ Görsel hazır"
             })
             save_chat(user, "assistant", "🖼️ Görsel hazır")
-
         else:
             st.session_state.chat.append({
                 "role": "assistant",
@@ -170,6 +174,7 @@ if st.button("Gönder") and txt.strip():
             })
             save_chat(user, "assistant", "❌ Görsel üretilemedi")
 
+    # TEXT
     else:
         res = openai_client.responses.create(
             model="gpt-4.1-mini",
