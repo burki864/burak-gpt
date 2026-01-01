@@ -94,7 +94,7 @@ with c5:
         if not confirm:
             st.error("⚠️ Onay ver")
         else:
-            supabase.from_("chat_logs") \
+            supabase.from_("chats") \
                 .delete() \
                 .eq("username", selected) \
                 .execute()
@@ -115,7 +115,7 @@ def load_chat(username):
     try:
         res = (
             supabase
-            .from_("chat_logs")
+            .from_("chats")
             .select("role, content, created_at")
             .eq("username", username)
             .order("created_at")
