@@ -79,7 +79,7 @@ for m in st.session_state.chat:
         st.markdown(f"**Sen:** {m['content']}")
     else:
         if m.get("type") == "image":
-            st.image(m["content"], use_container_width=True)
+            st.image(m["content"], width=350)
         else:
             st.markdown(f"**Burak GPT:** {m['content']}")
 
