@@ -35,6 +35,7 @@ def load_users():
         supabase
         .from_("users")
         .select("*")
+        .order("created_at", desc=True)
         .execute()
     )
     return res.data or []
@@ -58,7 +59,9 @@ st.subheader("📌 Kullanıcı Bilgisi")
 st.json(user)
 
 # ================= ACTIONS =================
-c1, c2, c3, c4 = st.columns(4)
+st.subheader("⚙️ İşlemler")
+
+c1, c2, c3, c4, c5 = st.columns(5)
 
 def update_user(data):
     supabase.from_("users") \
@@ -67,17 +70,44 @@ def update_user(data):
         .execute()
     st.rerun()
 
+# 🚫 BAN
 if c1.button("🚫 Ban"):
     update_user({"banned": True})
 
+# ✅ UNBAN
 if c2.button("✅ Unban"):
     update_user({"banned": False})
 
+# 🧹 SOFT DELETE
 if c3.button("🧹 Soft Delete"):
     update_user({"deleted": True})
 
+# ♻️ GERİ AÇ
 if c4.button("♻️ Geri Aç"):
     update_user({"deleted": False})
+
+# 🗑️ HARD DELETE (GERÇEK SİLME)
+with c5:
+    confirm = st.checkbox("Kalıcı sil")
+
+    if st.button("🗑️ HESABI SİL"):
+        if not confirm:
+            st.error("⚠️ Silmek için onay kutusunu işaretle")
+        else:
+            # Önce chat kayıtları
+            supabase.from_("chat_logs") \
+                .delete() \
+                .eq("username", selected) \
+                .execute()
+
+            # Sonra kullanıcı
+            supabase.from_("users") \
+                .delete() \
+                .eq("username", selected) \
+                .execute()
+
+            st.success("✅ Hesap kalıcı olarak silindi")
+            st.rerun()
 
 # ================= CHAT REPLAY =================
 st.divider()
