@@ -74,7 +74,7 @@ def save_chat(username, role, content, type_="text"):
 
 # ================= COOKIES (GLOBAL RESET) =================
 cookies = EncryptedCookieManager(
-    prefix="burak_v4_",  # 🔥 HERKES ÇIKIŞ
+    prefix="burak_v4_",  # 🔥 herkes çıkış
     password=st.secrets["COOKIE_SECRET"]
 )
 
@@ -132,6 +132,32 @@ update_last_seen(user)
 # ================= API =================
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
+# ================= TIME / DATE =================
+def is_time_request(text):
+    keys = [
+        "saat", "kaçta", "kaç",
+        "tarih", "bugün",
+        "ayın", "günlerden", "ne zaman"
+    ]
+    return any(k in text.lower() for k in keys)
+
+def get_time_reply():
+    now = datetime.now()
+    days_tr = {
+        "Monday": "Pazartesi",
+        "Tuesday": "Salı",
+        "Wednesday": "Çarşamba",
+        "Thursday": "Perşembe",
+        "Friday": "Cuma",
+        "Saturday": "Cumartesi",
+        "Sunday": "Pazar"
+    }
+    return (
+        f"⏰ Saat: **{now.strftime('%H:%M')}**\n\n"
+        f"📅 Tarih: **{now.strftime('%d.%m.%Y')}**\n"
+        f"📆 Gün: **{days_tr[now.strftime('%A')]}**"
+    )
+
 # ================= IMAGE =================
 def is_image_request(text):
     keys = ["çiz", "resim", "görsel", "image", "photo", "art", "manzara"]
@@ -183,6 +209,17 @@ if st.button("Gönder") and txt.strip():
     st.session_state.chat.append({"role": "user", "content": txt})
     save_chat(user, "user", txt)
 
+    # ⏰ SAAT / TARİH
+    if is_time_request(txt):
+        reply = get_time_reply()
+        st.session_state.chat.append({
+            "role": "assistant",
+            "content": reply
+        })
+        save_chat(user, "assistant", reply)
+        st.rerun()
+
+    # 🖼️ IMAGE
     if is_image_request(txt):
         img = generate_image(txt)
 
@@ -206,6 +243,7 @@ if st.button("Gönder") and txt.strip():
             })
             save_chat(user, "assistant", "❌ Görsel üretilemedi")
 
+    # 💬 TEXT
     else:
         res = openai_client.responses.create(
             model="gpt-4.1-mini",
