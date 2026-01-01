@@ -89,7 +89,6 @@ cookies = EncryptedCookieManager(
 )
 if not cookies.ready():
     st.stop()
-
 # ================= LOGIN =================
 if "user" not in st.session_state:
     st.session_state.user = cookies.get("user")
@@ -100,11 +99,26 @@ if not st.session_state.user:
 
     if st.button("Devam") and name.strip():
         user = name.strip()
+
+        # 🔍 KULLANICI ADI KONTROLÜ
+        check = (
+            supabase
+            .table("users")
+            .select("username")
+            .eq("username", user)
+            .execute()
+        )
+
+        if check.data:
+            st.error("❌ Bu isim zaten alınmış, başka bir isim dene")
+            st.stop()
+
+        # ✅ DEVAM
         st.session_state.user = user
         cookies["user"] = user
         cookies.save()
 
-        supabase.table("users").upsert({
+        supabase.table("users").insert({
             "username": user,
             "banned": False,
             "deleted": False,
@@ -115,8 +129,6 @@ if not st.session_state.user:
         st.rerun()
 
     st.stop()
-
-user = st.session_state.user
 
 # ================= USER CHECK =================
 res = supabase.table("users").select("*").eq("username", user).execute()
