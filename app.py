@@ -40,6 +40,17 @@ supabase = create_client(
     st.secrets["SUPABASE_KEY"]
 )
 
+def save_user(username):
+    existing = supabase.table("users") \
+        .select("id") \
+        .eq("username", username) \
+        .execute()
+
+    if not existing.data:
+        supabase.table("users").insert({
+            "username": username
+        }).execute()
+
 def save_chat(user, role, content, type_="text"):
     supabase.table("chats").insert({
         "username": user,
@@ -69,6 +80,9 @@ if not st.session_state.user:
         st.session_state.user = name.strip()
         cookies["user"] = st.session_state.user
         cookies.save()
+
+        save_user(st.session_state.user)  # 👈 USERS TABLOSUNA KAYIT
+
         st.rerun()
 
     st.stop()
@@ -96,7 +110,14 @@ def generate_image(prompt):
         randomize_seed=True,
         api_name="/generate_image"
     )
-    return result[0] if isinstance(result, list) else None
+
+    if isinstance(result, (list, tuple)) and result:
+        img = result[0]
+        if isinstance(img, dict) and img.get("url"):
+            return img["url"]
+        if isinstance(img, str):
+            return img
+    return None
 
 # ================= SESSION =================
 if "chat" not in st.session_state:
@@ -119,11 +140,15 @@ for m in st.session_state.chat:
 txt = st.text_input("Mesajın")
 
 if st.button("Gönder") and txt.strip():
-    st.session_state.chat.append({"role": "user", "content": txt})
+    st.session_state.chat.append({
+        "role": "user",
+        "content": txt
+    })
     save_chat(user, "user", txt)
 
     if is_image_request(txt):
         img = generate_image(txt)
+
         if img:
             st.session_state.chat.append({
                 "role": "assistant",
@@ -137,6 +162,7 @@ if st.button("Gönder") and txt.strip():
                 "content": "🖼️ Görsel hazır"
             })
             save_chat(user, "assistant", "🖼️ Görsel hazır")
+
         else:
             st.session_state.chat.append({
                 "role": "assistant",
@@ -150,6 +176,7 @@ if st.button("Gönder") and txt.strip():
             input=txt
         )
         reply = res.output_text
+
         st.session_state.chat.append({
             "role": "assistant",
             "content": reply
