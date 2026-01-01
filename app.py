@@ -113,6 +113,47 @@ user = st.session_state.user
 # ================= API =================
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
+# ================= IMAGE HELPERS =================
+def is_image_request(text: str) -> bool:
+    keywords = [
+        "çiz", "çizim", "resim", "görsel",
+        "image", "illustration", "foto",
+        "photo", "render", "manzara", "art"
+    ]
+    t = text.lower()
+    return any(k in t for k in keywords)
+
+def clean_image_prompt(p: str) -> str:
+    return f"""
+Ultra realistic, high quality, cinematic lighting.
+{p}
+Photorealistic, ultra detailed, sharp focus.
+"""
+
+def generate_image(prompt: str):
+    client = Client(
+        "mrfakename/Z-Image-Turbo",
+        token=st.secrets["HF_TOKEN"]
+    )
+
+    result = client.predict(
+        prompt=prompt,
+        height=768,
+        width=768,
+        num_inference_steps=9,
+        seed=0,
+        randomize_seed=True,
+        api_name="/generate_image"
+    )
+
+    if isinstance(result, (list, tuple)) and result:
+        img = result[0]
+        if isinstance(img, dict) and img.get("url"):
+            return img["url"]
+        if isinstance(img, str):
+            return img
+    return None
+
 # ================= CONVERSATION HELPERS =================
 def auto_title(text):
     return " ".join(text.split()[:5]).capitalize()
@@ -120,8 +161,7 @@ def auto_title(text):
 def create_conversation(username):
     res = supabase.table("conversations").insert({
         "username": username,
-        "title": "Yeni sohbet",
-        "created_at": datetime.utcnow().isoformat()
+        "title": "Yeni sohbet"
     }).execute()
     return res.data[0]["id"]
 
@@ -150,14 +190,14 @@ def save_message(username, role, content, conv_id):
         "username": username,
         "conversation_id": conv_id,
         "role": role,
-        "content": content,
-        "created_at": datetime.utcnow().isoformat()
+        "content": content
     }).execute()
 
 # ================= SESSION =================
 if "conversation_id" not in st.session_state:
     st.session_state.conversation_id = create_conversation(user)
     st.session_state.chat = []
+    st.session_state.last_image = None
 
 # ================= SIDEBAR =================
 with st.sidebar:
@@ -168,6 +208,7 @@ with st.sidebar:
         if col1.button(c["title"], key=c["id"]):
             st.session_state.conversation_id = c["id"]
             st.session_state.chat = load_messages(c["id"])
+            st.session_state.last_image = None
             st.rerun()
         if col2.button("🗑️", key=f"del_{c['id']}"):
             delete_conversation(c["id"])
@@ -178,6 +219,7 @@ with st.sidebar:
     if st.button("➕ Yeni Sohbet"):
         st.session_state.conversation_id = create_conversation(user)
         st.session_state.chat = []
+        st.session_state.last_image = None
         st.rerun()
 
 # ================= UI =================
@@ -191,10 +233,16 @@ for m in st.session_state.chat:
         unsafe_allow_html=True
     )
 
+if st.session_state.last_image:
+    st.markdown("<div class='ai-frame'>", unsafe_allow_html=True)
+    st.image(st.session_state.last_image, width=320)
+    st.markdown("</div>", unsafe_allow_html=True)
+
 # ================= INPUT =================
 txt = st.text_input("Mesajın")
 
 if st.button("Gönder") and txt.strip():
+
     if len(st.session_state.chat) == 0:
         supabase.table("conversations").update({
             "title": auto_title(txt)
@@ -203,11 +251,19 @@ if st.button("Gönder") and txt.strip():
     st.session_state.chat.append({"role": "user", "content": txt})
     save_message(user, "user", txt, st.session_state.conversation_id)
 
-    res = openai_client.responses.create(
-        model="gpt-4.1-mini",
-        input=st.session_state.chat
-    )
-    reply = res.output_text
+    if is_image_request(txt):
+        img = generate_image(clean_image_prompt(txt))
+        if img:
+            st.session_state.last_image = img
+            reply = "🖼️ Görsel hazır"
+        else:
+            reply = "❌ Görsel üretilemedi"
+    else:
+        res = openai_client.responses.create(
+            model="gpt-4.1-mini",
+            input=st.session_state.chat
+        )
+        reply = res.output_text
 
     st.session_state.chat.append({"role": "assistant", "content": reply})
     save_message(user, "assistant", reply, st.session_state.conversation_id)
