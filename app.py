@@ -1,4 +1,7 @@
 import os
+import threading
+import time
+import requests
 import streamlit as st
 from datetime import datetime
 from openai import OpenAI
@@ -6,12 +9,32 @@ from gradio_client import Client
 from streamlit_cookies_manager import EncryptedCookieManager
 from supabase import create_client
 
+# ================= KEEP AWAKE =================
+def keep_awake():
+    while True:
+        try:
+            requests.get("https://burakgpt.streamlit.app/")
+        except:
+            pass
+        time.sleep(600)  # 10 dk
+
+threading.Thread(target=keep_awake, daemon=True).start()
+
 # ================= PAGE =================
 st.set_page_config(
     page_title="Burak GPT",
     page_icon="🤖",
     layout="wide"
 )
+
+# ================= AUTO RELOAD (SLEEP FIX) =================
+st.markdown("""
+<script>
+setTimeout(function(){
+    window.location.reload();
+}, 2000);
+</script>
+""", unsafe_allow_html=True)
 
 # ================= SUPABASE =================
 supabase = create_client(
@@ -32,26 +55,22 @@ st.markdown(f"""
     background-color: {"#0e0e0e" if dark else "#ffffff"};
     color: {"#ffffff" if dark else "#000000"};
 }}
-
 .chat-user {{
     background: {"#1c1c1c" if dark else "#eaeaea"};
     padding:12px;
     border-radius:12px;
     margin-bottom:8px;
 }}
-
 .chat-bot {{
     background: {"#2a2a2a" if dark else "#dcdcdc"};
     padding:12px;
     border-radius:12px;
     margin-bottom:12px;
 }}
-
 input {{
     background-color: {"#1e1e1e" if dark else "#f2f2f2"} !important;
     color: {"#ffffff" if dark else "#000000"} !important;
 }}
-
 .ai-frame {{
     display:inline-block;
     padding:10px;
@@ -149,20 +168,16 @@ cartoon, anime, illustration, watermark, low quality
 def generate_image(prompt: str):
     client = Client("burak12321/burak-gpt-image")
     result = client.predict(prompt)
-
-    if isinstance(result, list) and len(result) > 0:
+    if isinstance(result, list) and result:
         return result[0]
-
     if isinstance(result, str):
         return result
-
     return None
 
 # ================= MAIN =================
 st.title("🤖 Burak GPT")
 st.caption("Sohbet + Görsel • Gerçek AI")
 
-# CHAT HISTORY
 for m in st.session_state.chat:
     cls = "chat-user" if m["role"] == "user" else "chat-bot"
     name = "Sen" if m["role"] == "user" else "Burak GPT"
@@ -171,7 +186,6 @@ for m in st.session_state.chat:
         unsafe_allow_html=True
     )
 
-# IMAGE OUTPUT (SAFE)
 if st.session_state.last_image:
     st.markdown("<div class='ai-frame'>", unsafe_allow_html=True)
     st.image(st.session_state.last_image, width=320)
@@ -185,34 +199,21 @@ with c2:
     send = st.button("➤")
 
 if send and txt.strip():
-    st.session_state.chat.append({
-        "role": "user",
-        "content": txt
-    })
+    st.session_state.chat.append({"role": "user", "content": txt})
 
     if wants_image(txt):
         st.info("🎨 Görsel oluşturuluyor...")
-
         img = generate_image(clean_image_prompt(txt))
-
         if img:
             st.session_state.last_image = img
-            st.session_state.chat.append({
-                "role": "assistant",
-                "content": "🖼️ Görsel hazır"
-            })
+            st.session_state.chat.append({"role": "assistant", "content": "🖼️ Görsel hazır"})
         else:
-            st.session_state.chat.append({
-                "role": "assistant",
-                "content": "❌ Görsel üretilemedi"
-            })
-
+            st.session_state.chat.append({"role": "assistant", "content": "❌ Görsel üretilemedi"})
     else:
         res = openai_client.responses.create(
             model="gpt-4.1-mini",
             input=st.session_state.chat
         )
-
         st.session_state.chat.append({
             "role": "assistant",
             "content": res.output_text
