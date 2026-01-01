@@ -176,11 +176,10 @@ Photorealistic, cinematic lighting, ultra detail.
 """
 
 def generate_image(prompt: str, progress):
-    client = Client(
-        "mrfakename/Z-Image-Turbo",
-        hf_token=st.secrets["HF_TOKEN"]
-    )
-
+   client = Client(
+    "mrfakename/Z-Image-Turbo",
+    token=st.secrets["HF_TOKEN"]
+)
     progress.progress(20)
 
     result, seed = client.predict(
