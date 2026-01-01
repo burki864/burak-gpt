@@ -154,9 +154,9 @@ def generate_image(prompt: str):
             return img
     return None
 
-# ================= GALLERY HELPERS (EKLENDİ) =================
+# ================= GALLERY HELPERS (FIX) =================
 def save_image(username, prompt, image_url):
-    supabase.table("gallery").insert({
+    supabase.table("image_gallery").insert({
         "username": username,
         "prompt": prompt,
         "image_url": image_url,
@@ -164,15 +164,15 @@ def save_image(username, prompt, image_url):
     }).execute()
 
 def load_gallery(username):
-    res = supabase.table("gallery") \
-        .select("id,prompt,image_url") \
+    res = supabase.table("image_gallery") \
+        .select("id,prompt,image_url,created_at") \
         .eq("username", username) \
         .order("created_at", desc=True) \
         .execute()
     return res.data or []
 
 def delete_image(img_id):
-    supabase.table("gallery").delete().eq("id", img_id).execute()
+    supabase.table("image_gallery").delete().eq("id", img_id).execute()
 
 # ================= CONVERSATION HELPERS =================
 def auto_title(text):
@@ -247,7 +247,8 @@ with st.sidebar:
 
     if st.button("🖼️ Galeri"):
         st.session_state.open_gallery = True
-# ================= GALLERY POPUP (STREAMLIT SAFE) =================
+
+# ================= GALLERY POPUP =================
 if st.session_state.open_gallery:
     with st.expander("🖼️ Görsel Galeri", expanded=True):
         images = load_gallery(user)
