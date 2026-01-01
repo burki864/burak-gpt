@@ -135,7 +135,6 @@ supabase.table("users").update({
 
 # ================= API =================
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-os.environ["HF_TOKEN"] = st.secrets["HF_TOKEN"]
 
 # ================= CHAT HELPERS =================
 def save_message(username, role, content):
@@ -176,26 +175,32 @@ Photorealistic, cinematic lighting, ultra detail.
 """
 
 def generate_image(prompt: str, progress):
-   client = Client(
-    "mrfakename/Z-Image-Turbo",
-    token=st.secrets["HF_TOKEN"]
-)
+    client = Client(
+        "mrfakename/Z-Image-Turbo",
+        token=st.secrets["HF_TOKEN"]
+    )
+
     progress.progress(20)
 
-    result, seed = client.predict(
+    result = client.predict(
         prompt=prompt,
         height=768,
         width=768,
         num_inference_steps=9,
         seed=0,
         randomize_seed=True,
-        api_name="/generate_image"   # 🔥 KRİTİK SATIR
+        api_name="/generate_image"
     )
 
     progress.progress(90)
 
-    if isinstance(result, dict) and result.get("url"):
-        return result["url"]
+    # HF Space dönüşleri bazen tuple / list olur
+    if isinstance(result, (list, tuple)) and result:
+        img = result[0]
+        if isinstance(img, dict) and img.get("url"):
+            return img["url"]
+        if isinstance(img, str):
+            return img
 
     return None
 
