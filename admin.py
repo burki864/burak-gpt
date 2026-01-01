@@ -4,10 +4,10 @@ from supabase import create_client
 # ================= PAGE =================
 st.set_page_config("Admin Panel", "🛠️", "wide")
 
-# ================= SUPABASE =================
+# ================= SUPABASE (SERVICE ROLE) =================
 supabase = create_client(
     st.secrets["SUPABASE_URL"],
-    st.secrets["SUPABASE_KEY"]  # service_role_key
+    st.secrets["SUPABASE_SERVICE_KEY"]  # 🔥 RLS BYPASS
 )
 
 # ================= AUTH =================
@@ -27,7 +27,7 @@ if not st.session_state.admin:
 
 # ================= LOAD USERS =================
 def load_users():
-    res = supabase.table("public.users") \
+    res = supabase.from_("public.users") \
         .select("*") \
         .order("created_at", desc=True) \
         .execute()
@@ -61,22 +61,34 @@ st.json({
 c1, c2, c3, c4 = st.columns(4)
 
 if c1.button("🚫 Ban"):
-    supabase.from_("public.users").update({"banned": True}).eq("username", selected).execute()
+    supabase.from_("public.users") \
+        .update({"banned": True}) \
+        .eq("username", selected) \
+        .execute()
     st.success("Kullanıcı banlandı")
     st.rerun()
 
 if c2.button("✅ Unban"):
-    supabase.from_("public.users").update({"banned": False}).eq("username", selected).execute()
+    supabase.from_("public.users") \
+        .update({"banned": False}) \
+        .eq("username", selected) \
+        .execute()
     st.success("Ban kaldırıldı")
     st.rerun()
 
 if c3.button("🧹 Soft Delete"):
-    supabase.from_("public.users").update({"deleted": True}).eq("username", selected).execute()
-    st.success("Kullanıcı silindi (soft)")
+    supabase.from_("public.users") \
+        .update({"deleted": True}) \
+        .eq("username", selected) \
+        .execute()
+    st.success("Kullanıcı soft delete edildi")
     st.rerun()
 
 if c4.button("♻️ Geri Aç"):
-    supabase.from_("public.users").update({"deleted": False}).eq("username", selected).execute()
+    supabase.from_("public.users") \
+        .update({"deleted": False}) \
+        .eq("username", selected) \
+        .execute()
     st.success("Kullanıcı geri açıldı")
     st.rerun()
 
@@ -85,13 +97,12 @@ st.divider()
 st.subheader("🎥 Sohbet Replay")
 
 def load_conversation(username):
-    res = supabase.table("chat_logs_grouped") \
+    res = supabase.from_("public.chat_logs_grouped") \
         .select("conversation") \
         .eq("username", username) \
+        .single() \
         .execute()
-    if res.data:
-        return res.data[0]["conversation"]
-    return None
+    return res.data["conversation"] if res.data else None
 
 conversation = load_conversation(selected)
 
@@ -108,15 +119,24 @@ st.subheader("⚡ Hızlı Filtreler")
 c5, c6, c7 = st.columns(3)
 
 if c5.button("🚫 Sadece Banlılar"):
-    banned = supabase.from_("public.users").select("*").eq("banned", True).execute().data
+    banned = supabase.from_("public.users") \
+        .select("*") \
+        .eq("banned", True) \
+        .execute().data
     st.dataframe(banned)
 
 if c6.button("🧹 Silinenler"):
-    deleted = supabase.from_("public.users").select("*").eq("deleted", True).execute().data
+    deleted = supabase.from_("public.users") \
+        .select("*") \
+        .eq("deleted", True) \
+        .execute().data
     st.dataframe(deleted)
 
 if c7.button("🟢 Online"):
-    online = supabase.from_("public.users").select("*").eq("is_online", True).execute().data
+    online = supabase.from_("public.users") \
+        .select("*") \
+        .eq("is_online", True) \
+        .execute().data
     st.dataframe(online)
 
 # ================= NAV =================
