@@ -37,106 +37,38 @@ supabase = create_client(
 st.markdown("""
 <style>
 
-/* ====== SAYFA ZEMİNİ (STREAMLIT ROOT) ====== */
+/* ===== GENEL ARKA PLAN ===== */
 .stApp {
-    background: radial-gradient(circle at top, #1a1a1a, #0b0b0b);
+    background-color: #0b0b0b;
     color: #f2f2f2;
 }
 
-/* ÜST BOŞLUKLARI TEMİZLE */
-header, footer {
-    visibility: hidden;
-}
-
+/* Streamlit üst boşlukları azalt */
 .block-container {
-    padding-top: 0.8rem !important;
-    padding-bottom: 0 !important;
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
 }
 
-/* ====== CHAT ALANI ====== */
-.chat-box {
-    height: calc(100vh - 140px);
-    overflow-y: auto;
-    padding: 20px 24px 120px 24px;
+/* ===== CHAT METİNLERİ ===== */
+.chat-line {
+    margin-bottom: 8px;
+    line-height: 1.6;
+    font-size: 15px;
 }
 
-/* Scroll */
-.chat-box::-webkit-scrollbar {
-    width: 6px;
-}
-.chat-box::-webkit-scrollbar-thumb {
-    background: #333;
-    border-radius: 10px;
+/* Kullanıcı */
+.chat-user {
+    color: #60a5fa;
 }
 
-/* ====== BALONLAR ====== */
-.chat-bubble {
-    max-width: 70%;
-    padding: 12px 16px;
-    margin-bottom: 12px;
-    border-radius: 16px;
-    line-height: 1.5;
-    box-shadow: 0 6px 16px rgba(0,0,0,.4);
-    animation: fadeIn .15s ease-in;
+/* Bot */
+.chat-bot {
+    color: #e5e7eb;
 }
 
-/* USER */
-.chat-bubble.user {
-    background: linear-gradient(135deg, #2563eb, #1d4ed8);
-    margin-left: auto;
-    border-bottom-right-radius: 4px;
-}
-
-/* BOT */
-.chat-bubble.bot {
-    background: #1e1e1e;
-    margin-right: auto;
-    border-bottom-left-radius: 4px;
-}
-
-/* ====== SABİT INPUT BAR ====== */
-.input-fixed {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    background: rgba(10,10,10,.97);
-    backdrop-filter: blur(10px);
-    padding: 14px 24px;
-    border-top: 1px solid #222;
-    z-index: 9999;
-}
-
-/* Input */
-.input-fixed input {
-    background: #111 !important;
-    color: #f2f2f2 !important;
-    border-radius: 12px !important;
-    border: 1px solid #333 !important;
-    padding: 10px 14px !important;
-}
-
-/* Button */
-.input-fixed button {
-    background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
-    color: white !important;
-    border-radius: 12px !important;
-    border: none !important;
-    height: 44px;
-    font-weight: 600;
-}
-
-/* ====== ANİMASYON ====== */
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(4px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
+/* ===== INPUT NORMAL KALSIN ===== */
+/* HİÇBİR position:fixed YOK */
+/* HİÇBİR override YOK */
 
 </style>
 """, unsafe_allow_html=True)
