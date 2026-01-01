@@ -36,68 +36,105 @@ supabase = create_client(
 # ================= STYLE =================
 st.markdown("""
 <style>
-.stApp {
-    background: radial-gradient(circle at top, #1b1b1b, #0f0f0f);
-    color: #eaeaea;
+/* ========== GENEL SAYFA ========== */
+html, body, [class*="css"] {
+    background: radial-gradient(circle at top, #1a1a1a, #0b0b0b);
+    color: #f2f2f2;
 }
 
-.chat-box {
-    height: 65vh;
-    overflow-y: auto;
-    padding: 12px;
-    border-radius: 14px;
-    background: #121212;
-    border: 1px solid #222;
-}
-
-.chat-bubble {
-    padding: 10px 14px;
-    border-radius: 14px;
-    margin-bottom: 8px;
-    max-width: 70%;
-    line-height: 1.4;
-    word-wrap: break-word;
-}
-
-.user {
-    background: linear-gradient(135deg, #2563eb, #1e40af);
-    margin-left: auto;
-    color: white;
-}
-
-.bot {
-    background: #1f1f1f;
-    border: 1px solid #2a2a2a;
-    color: #eaeaea;
-    margin-right: auto;
-}
-</style>
-""", unsafe_allow_html=True)
-<style>
-/* Üst boşluğu öldür */
+/* Streamlit üst boşluğu KALDIR */
 .block-container {
-    padding-top: 2rem !important;
+    padding-top: 1.5rem !important;
+    padding-bottom: 0 !important;
 }
 
-/* Chat alanı */
+/* ========== CHAT ALANI ========== */
 .chat-box {
-    height: calc(100vh - 160px);
+    height: calc(100vh - 150px);
     overflow-y: auto;
-    padding-bottom: 80px;
+    padding: 16px 24px 90px 24px;
+    scroll-behavior: smooth;
 }
 
-/* Input alanını alta sabitle */
+/* Scrollbar */
+.chat-box::-webkit-scrollbar {
+    width: 6px;
+}
+.chat-box::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 10px;
+}
+
+/* ========== MESAJ BALONLARI ========== */
+.chat-bubble {
+    max-width: 70%;
+    padding: 12px 16px;
+    border-radius: 16px;
+    margin-bottom: 12px;
+    line-height: 1.45;
+    word-wrap: break-word;
+    box-shadow: 0 4px 14px rgba(0,0,0,.35);
+    animation: fadeIn .2s ease-in;
+}
+
+/* Kullanıcı */
+.chat-bubble.user {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    margin-left: auto;
+    border-bottom-right-radius: 4px;
+}
+
+/* Bot */
+.chat-bubble.bot {
+    background: #1f1f1f;
+    margin-right: auto;
+    border-bottom-left-radius: 4px;
+}
+
+/* ========== INPUT SABİT ALT BAR ========== */
 .input-fixed {
     position: fixed;
     bottom: 0;
     left: 0;
     width: 100%;
-    background: #0f0f0f;
+    background: rgba(15,15,15,.95);
+    backdrop-filter: blur(10px);
     padding: 12px 24px;
     border-top: 1px solid #222;
     z-index: 999;
 }
+
+/* Text input */
+.input-fixed input {
+    background: #111 !important;
+    color: #f2f2f2 !important;
+    border-radius: 12px !important;
+    border: 1px solid #333 !important;
+    padding: 10px 14px !important;
+}
+
+/* Gönder butonu */
+.input-fixed button {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+    color: white !important;
+    border-radius: 12px !important;
+    border: none !important;
+    height: 44px;
+    font-weight: 600;
+}
+/* ========== ANİMASYON ========== */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 </style>
+
 # ================= COOKIES =================
 cookies = EncryptedCookieManager(
     prefix="burak_",
