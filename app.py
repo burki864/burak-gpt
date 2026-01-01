@@ -281,11 +281,11 @@ if st.button("Gönder") and txt.strip():
         else:
             reply = "❌ Görsel üretilemedi"
     else:
-        # 🔧 SADECE BURASI DÜZELTİLDİ
+        # ✅ SADECE BURASI DÜZELTİLDİ
         messages = [
             {
                 "role": m["role"],
-                "content": [{"type": "text", "text": m["content"]}]
+                "content": m["content"]
             }
             for m in st.session_state.chat
         ]
@@ -294,6 +294,7 @@ if st.button("Gönder") and txt.strip():
             model="gpt-4.1-mini",
             input=messages
         )
+
         reply = res.output_text
 
     st.session_state.chat.append({"role": "assistant", "content": reply})
