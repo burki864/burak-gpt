@@ -67,6 +67,22 @@ st.markdown(f"""
 }}
 </style>
 """, unsafe_allow_html=True)
+.image-frame {
+    padding: 14px;
+    border-radius: 22px;
+    background: linear-gradient(
+        135deg,
+        #2f2f2f,
+        #4a4a4a,
+        #2a2a2a
+    );
+    box-shadow: 0 0 25px rgba(0,0,0,0.6);
+    display: inline-block;
+    margin-top: 14px;
+}
+.image-frame img {
+    border-radius: 16px;
+}
 
 # ================= COOKIES =================
 cookies = EncryptedCookieManager(
