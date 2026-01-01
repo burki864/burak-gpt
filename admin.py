@@ -11,7 +11,7 @@ st_autorefresh(interval=2000, key="admin_live")
 # ================= SUPABASE =================
 supabase = create_client(
     st.secrets["SUPABASE_URL"],
-    st.secrets["SUPABASE_SERVICE_KEY"]  # SERVICE ROLE (RLS BYPASS)
+    st.secrets["SUPABASE_SERVICE_KEY"]  # SERVICE ROLE
 )
 
 # ================= AUTH =================
@@ -31,14 +31,18 @@ if not st.session_state.admin:
 
 # ================= LOAD USERS =================
 def load_users():
-    res = (
-        supabase
-        .from_("users")
-        .select("*")
-        .order("created_at", desc=True)
-        .execute()
-    )
-    return res.data or []
+    try:
+        res = (
+            supabase
+            .from_("users")
+            .select("*")
+            .execute()
+        )
+        return res.data or []
+    except Exception as e:
+        st.error("❌ Kullanıcılar yüklenemedi")
+        st.exception(e)
+        return []
 
 users = load_users()
 
@@ -70,37 +74,31 @@ def update_user(data):
         .execute()
     st.rerun()
 
-# 🚫 BAN
 if c1.button("🚫 Ban"):
     update_user({"banned": True})
 
-# ✅ UNBAN
 if c2.button("✅ Unban"):
     update_user({"banned": False})
 
-# 🧹 SOFT DELETE
 if c3.button("🧹 Soft Delete"):
     update_user({"deleted": True})
 
-# ♻️ GERİ AÇ
 if c4.button("♻️ Geri Aç"):
     update_user({"deleted": False})
 
-# 🗑️ HARD DELETE (GERÇEK SİLME)
+# ================= HARD DELETE =================
 with c5:
     confirm = st.checkbox("Kalıcı sil")
 
     if st.button("🗑️ HESABI SİL"):
         if not confirm:
-            st.error("⚠️ Silmek için onay kutusunu işaretle")
+            st.error("⚠️ Onay ver")
         else:
-            # Önce chat kayıtları
             supabase.from_("chat_logs") \
                 .delete() \
                 .eq("username", selected) \
                 .execute()
 
-            # Sonra kullanıcı
             supabase.from_("users") \
                 .delete() \
                 .eq("username", selected) \
@@ -114,20 +112,23 @@ st.divider()
 st.subheader("🎥 Canlı Sohbet Replay")
 
 def load_chat(username):
-    res = (
-        supabase
-        .from_("chat_logs")
-        .select("role, content, created_at")
-        .eq("username", username)
-        .order("created_at")
-        .execute()
-    )
-    return res.data or []
+    try:
+        res = (
+            supabase
+            .from_("chat_logs")
+            .select("role, content, created_at")
+            .eq("username", username)
+            .order("created_at")
+            .execute()
+        )
+        return res.data or []
+    except:
+        return []
 
 messages = load_chat(selected)
 
 if messages:
-    with st.expander("🗂️ Konuşma (Canlı)", expanded=True):
+    with st.expander("🗂️ Konuşma", expanded=True):
         for m in messages:
             role = "👤 USER" if m["role"] == "user" else "🤖 AI"
             st.markdown(f"**{role}:** {m['content']}")
