@@ -41,7 +41,14 @@ supabase = create_client(
 )
 
 # ================= USERS =================
-def save_user(username):
+def get_user(username):
+    res = supabase.table("users") \
+        .select("*") \
+        .eq("username", username) \
+        .execute()
+    return res.data[0] if res.data else None
+
+def upsert_user(username):
     supabase.table("users").upsert({
         "username": username,
         "banned": False,
@@ -49,6 +56,12 @@ def save_user(username):
         "is_online": True,
         "last_seen": datetime.utcnow().isoformat()
     }, on_conflict="username").execute()
+
+def update_last_seen(username):
+    supabase.table("users").update({
+        "last_seen": datetime.utcnow().isoformat(),
+        "is_online": True
+    }).eq("username", username).execute()
 
 def save_chat(username, role, content, type_="text"):
     supabase.table("chats").insert({
@@ -59,9 +72,9 @@ def save_chat(username, role, content, type_="text"):
         "created_at": datetime.utcnow().isoformat()
     }).execute()
 
-# ================= COOKIES (🔥 GLOBAL RESET) =================
+# ================= COOKIES (GLOBAL RESET) =================
 cookies = EncryptedCookieManager(
-    prefix="burak_v3_",   # 🔥 PREFIX DEĞİŞTİ → HERKES ÇIKIŞ
+    prefix="burak_v4_",  # 🔥 HERKES ÇIKIŞ
     password=st.secrets["COOKIE_SECRET"]
 )
 
@@ -77,20 +90,44 @@ if not st.session_state.user:
     name = st.text_input("Adın nedir?")
 
     if st.button("Devam") and name.strip():
-        st.session_state.user = name.strip()
-        cookies["user"] = st.session_state.user
+        username = name.strip()
+
+        user_db = get_user(username)
+
+        if user_db and user_db["deleted"]:
+            st.error("⛔ Bu hesap silinmiş.")
+            st.stop()
+
+        if user_db and user_db["banned"]:
+            st.error("🚫 Bu hesap banlı.")
+            st.stop()
+
+        st.session_state.user = username
+        cookies["user"] = username
         cookies.save()
 
-        save_user(st.session_state.user)
-
+        upsert_user(username)
         st.rerun()
 
     st.stop()
 
-# 🔁 Cookie’den gelen ama DB’de olmayanları da garanti kaydet
-save_user(st.session_state.user)
-
+# ================= USER CHECK =================
 user = st.session_state.user
+user_db = get_user(user)
+
+if not user_db:
+    upsert_user(user)
+    user_db = get_user(user)
+
+if user_db["deleted"]:
+    st.error("⛔ Hesabın silinmiş.")
+    st.stop()
+
+if user_db["banned"]:
+    st.error("🚫 Banlandın.")
+    st.stop()
+
+update_last_seen(user)
 
 # ================= API =================
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
@@ -143,11 +180,9 @@ for m in st.session_state.chat:
 txt = st.text_input("Mesajın")
 
 if st.button("Gönder") and txt.strip():
-    # USER
     st.session_state.chat.append({"role": "user", "content": txt})
     save_chat(user, "user", txt)
 
-    # IMAGE
     if is_image_request(txt):
         img = generate_image(txt)
 
@@ -171,7 +206,6 @@ if st.button("Gönder") and txt.strip():
             })
             save_chat(user, "assistant", "❌ Görsel üretilemedi")
 
-    # TEXT
     else:
         res = openai_client.responses.create(
             model="gpt-4.1-mini",
