@@ -149,12 +149,20 @@ if send and txt.strip():
     st.session_state.chat.append({"role":"user","content":txt})
 
     if is_image_request(txt):
-        img = generate_image(txt)
-        reply = "🖼️ Görsel hazır" if img else "❌ Görsel üretilemedi"
+    img = generate_image(clean_image_prompt(txt))
+
+    if img:
+        # 👇 GÖRSELİ CHAT'E EKLE
+        st.session_state.chat.append({
+            "role": "assistant",
+            "content": "[IMAGE]"
+        })
+
+        st.session_state.last_image = img
+        reply = "🖼️ Görsel hazır"
     else:
-        res = openai_client.responses.create(
-            model="gpt-4.1-mini",
-            input=[{"role":m["role"],"content":m["content"]} for m in st.session_state.chat]
+        reply = "❌ Görsel üretilemedi"
+
         )
         reply = res.output_text
 
