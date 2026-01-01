@@ -73,7 +73,31 @@ st.markdown("""
 }
 </style>
 """, unsafe_allow_html=True)
+<style>
+/* Üst boşluğu öldür */
+.block-container {
+    padding-top: 2rem !important;
+}
 
+/* Chat alanı */
+.chat-box {
+    height: calc(100vh - 160px);
+    overflow-y: auto;
+    padding-bottom: 80px;
+}
+
+/* Input alanını alta sabitle */
+.input-fixed {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: #0f0f0f;
+    padding: 12px 24px;
+    border-top: 1px solid #222;
+    z-index: 999;
+}
+</style>
 # ================= COOKIES =================
 cookies = EncryptedCookieManager(
     prefix="burak_",
