@@ -35,22 +35,27 @@ supabase = create_client(
     st.secrets["SUPABASE_KEY"]
 )
 
-# ================= STYLE =================
+# ================= STYLE (FULL BLACK + FRAME) =================
 st.markdown("""
 <style>
+html, body, [data-testid="stApp"] {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
 @keyframes pulseGlow {
-    0% { box-shadow: 0 0 6px rgba(180,180,180,0.25); }
-    50% { box-shadow: 0 0 22px rgba(220,220,220,0.7); }
-    100% { box-shadow: 0 0 6px rgba(180,180,180,0.25); }
+    0% { box-shadow: 0 0 6px rgba(200,200,200,0.25); }
+    50% { box-shadow: 0 0 22px rgba(230,230,230,0.7); }
+    100% { box-shadow: 0 0 6px rgba(200,200,200,0.25); }
 }
 
 .image-frame {
     padding: 14px;
     border-radius: 10px;
-    background: linear-gradient(135deg,#1e1e1e,#3a3a3a,#1e1e1e);
+    background: linear-gradient(135deg,#111,#333,#111);
     animation: pulseGlow 2.2s infinite ease-in-out;
     width: fit-content;
-    margin-top: 12px;
+    margin-top: 14px;
 }
 
 .image-frame img {
@@ -74,11 +79,13 @@ if "user" not in st.session_state:
 if not st.session_state.user:
     st.title("👋 Hoş Geldin")
     name = st.text_input("Adın nedir?")
+
     if st.button("Devam") and name.strip():
         username = name.strip()
+
         check = supabase.table("users").select("username").eq("username", username).execute()
         if check.data:
-            st.error("❌ Bu isim alınmış")
+            st.error("❌ Bu isim zaten alınmış")
             st.stop()
 
         cookies["user"] = username
@@ -94,6 +101,7 @@ if not st.session_state.user:
         }).execute()
 
         st.rerun()
+
     st.stop()
 
 user = st.session_state.user
@@ -103,38 +111,45 @@ openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 # ================= IMAGE =================
 def is_image_request(text):
-    keys = ["çiz","resim","görsel","image","photo","art","manzara"]
+    keys = ["çiz","çizim","resim","görsel","image","photo","art","manzara"]
     return any(k in text.lower() for k in keys)
 
 def clean_image_prompt(p):
     return f"Ultra realistic, cinematic lighting, high detail. {p}"
 
 def generate_image(prompt):
-    client = Client("mrfakename/Z-Image-Turbo", token=st.secrets["HF_TOKEN"])
-    result = client.predict(
-        prompt=prompt,
-        height=768,
-        width=768,
-        num_inference_steps=9,
-        randomize_seed=True,
-        api_name="/generate_image"
-    )
+    try:
+        client = Client("mrfakename/Z-Image-Turbo", token=st.secrets["HF_TOKEN"])
+        result = client.predict(
+            prompt=prompt,
+            height=768,
+            width=768,
+            num_inference_steps=9,
+            randomize_seed=True,
+            api_name="/generate_image"
+        )
 
-    if not result:
-        return None
+        if not result:
+            return None
 
-    img = result[0]
+        img = result[0]
 
-    if isinstance(img, dict) and img.get("url"):
-        return img["url"]
+        if isinstance(img, dict) and img.get("url"):
+            return img["url"]
 
-    if isinstance(img, str) and img.startswith("http"):
-        return img
+        if isinstance(img, str) and img.startswith("http"):
+            return img
 
-    if isinstance(img, Image.Image):
-        buf = BytesIO()
-        img.save(buf, format="PNG")
-        return buf.getvalue()
+        if isinstance(img, Image.Image):
+            buf = BytesIO()
+            img.save(buf, format="PNG")
+            return buf.getvalue()
+
+        if isinstance(img, bytes):
+            return img
+
+    except Exception as e:
+        print("IMAGE ERROR:", e)
 
     return None
 
@@ -183,7 +198,7 @@ def save_message(username, role, content, cid):
         "content": content
     }).execute()
 
-# ================= SESSION =================
+# ================= SESSION (RESET FIX) =================
 if "conversation_id" not in st.session_state:
     convs = load_conversations(user)
     if convs:
@@ -197,6 +212,8 @@ if "conversation_id" not in st.session_state:
 
 # ================= SIDEBAR =================
 with st.sidebar:
+    st.markdown("## 💬 Sohbetler")
+
     for c in load_conversations(user):
         if st.button(c["title"], key=c["id"]):
             st.session_state.conversation_id = c["id"]
@@ -215,7 +232,7 @@ with st.sidebar:
 
 # ================= GALLERY =================
 if st.session_state.open_gallery:
-    with st.expander("🖼️ Galeri", expanded=True):
+    with st.expander("🖼️ Görsel Galeri", expanded=True):
         for img in load_gallery(user):
             st.image(img["image_url"], use_container_width=True)
             st.caption(img["prompt"])
