@@ -212,16 +212,22 @@ def save_message(username, role, content, conv_id):
         "role": role,
         "content": content
     }).execute()
-
 # ================= SESSION =================
 if "conversation_id" not in st.session_state:
-    st.session_state.conversation_id = create_conversation(user)
-    st.session_state.chat = []
+
+    conversations = load_conversations(user)
+
+    if conversations:
+        # son sohbeti yükle
+        last_conv = conversations[0]
+        st.session_state.conversation_id = last_conv["id"]
+        st.session_state.chat = load_messages(last_conv["id"])
+    else:
+        # ilk defa giriyorsa yeni sohbet aç
+        st.session_state.conversation_id = create_conversation(user)
+        st.session_state.chat = []
+
     st.session_state.last_image = None
-
-if "open_gallery" not in st.session_state:
-    st.session_state.open_gallery = False
-
 # ================= SIDEBAR =================
 with st.sidebar:
     st.markdown("## 💬 Sohbetler")
