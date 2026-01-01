@@ -21,11 +21,7 @@ def keep_awake():
 threading.Thread(target=keep_awake, daemon=True).start()
 
 # ================= PAGE =================
-st.set_page_config(
-    page_title="Burak GPT",
-    page_icon="🤖",
-    layout="wide"
-)
+st.set_page_config(page_title="Burak GPT", page_icon="🤖", layout="wide")
 
 # ================= SUPABASE =================
 supabase = create_client(
@@ -40,46 +36,58 @@ if "theme" not in st.session_state:
 dark = st.session_state.theme == "dark"
 
 # ================= STYLE =================
-st.markdown("""
+st.markdown(f"""
 <style>
-@keyframes pulseGlow {
-    0% {
-        box-shadow: 0 0 6px rgba(180,180,180,0.2),
-                    inset 0 0 6px rgba(180,180,180,0.15);
-        opacity: 0.85;
-    }
-    50% {
-        box-shadow: 0 0 22px rgba(220,220,220,0.6),
-                    inset 0 0 12px rgba(220,220,220,0.4);
+.stApp {{
+    background-color: {"#0e0e0e" if dark else "#f5f5f5"};
+    color: {"#ffffff" if dark else "#000000"};
+}}
+
+.chat-user {{
+    background: {"#1c1c1c" if dark else "#eaeaea"};
+    padding:12px;
+    border-radius:12px;
+    margin-bottom:8px;
+}}
+
+.chat-bot {{
+    background: {"#2a2a2a" if dark else "#dcdcdc"};
+    padding:12px;
+    border-radius:12px;
+    margin-bottom:12px;
+}}
+
+@keyframes pulseGlow {{
+    0% {{
+        box-shadow: 0 0 6px rgba(180,180,180,0.2);
+        opacity: .85;
+    }}
+    50% {{
+        box-shadow: 0 0 22px rgba(220,220,220,0.7);
         opacity: 1;
-    }
-    100% {
-        box-shadow: 0 0 6px rgba(180,180,180,0.2),
-                    inset 0 0 6px rgba(180,180,180,0.15);
-        opacity: 0.85;
-    }
-}
+    }}
+    100% {{
+        box-shadow: 0 0 6px rgba(180,180,180,0.2);
+        opacity: .85;
+    }}
+}}
 
-.image-frame {
-    width: fit-content;
-    padding: 14px;
-    border-radius: 10px; /* ⬅️ KAREYE YAKIN */
-    background: linear-gradient(
-        135deg,
-        #1e1e1e,
-        #3a3a3a,
-        #1e1e1e
-    );
-    animation: pulseGlow 2.2s infinite ease-in-out;
-    margin-top: 14px;
-}
+.image-frame {{
+    display:inline-block;
+    padding:14px;
+    border-radius:10px;
+    background: linear-gradient(135deg,#2b2b2b,#555,#2b2b2b);
+    animation: pulseGlow 2.2s infinite;
+    margin-top:14px;
+}}
 
-.image-frame img {
-    border-radius: 6px;
-    display: block;
-}
+.image-frame img {{
+    border-radius:6px;
+    display:block;
+}}
 </style>
 """, unsafe_allow_html=True)
+
 # ================= COOKIES =================
 cookies = EncryptedCookieManager(
     prefix="burak_",
@@ -97,25 +105,14 @@ if not st.session_state.user:
     name = st.text_input("Adın nedir?")
 
     if st.button("Devam") and name.strip():
-        username = name.strip()
-
-        check = supabase.table("users").select("username").eq("username", username).execute()
-        if check.data:
-            st.error("❌ Bu isim zaten alınmış")
-            st.stop()
-
-        st.session_state.user = username
-        cookies["user"] = username
+        st.session_state.user = name.strip()
+        cookies["user"] = st.session_state.user
         cookies.save()
 
         supabase.table("users").insert({
-            "username": username,
-            "banned": False,
-            "deleted": False,
-            "is_online": True,
+            "username": st.session_state.user,
             "last_seen": datetime.utcnow().isoformat()
         }).execute()
-
         st.rerun()
 
     st.stop()
@@ -125,144 +122,54 @@ user = st.session_state.user
 # ================= API =================
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# ================= IMAGE HELPERS =================
-def is_image_request(text: str) -> bool:
-    keywords = [
-        "çiz", "çizim", "resim", "görsel",
-        "image", "illustration", "foto",
-        "photo", "render", "manzara", "art"
-    ]
-    t = text.lower()
-    return any(k in t for k in keywords)
+# ================= IMAGE =================
+def is_image_request(t):
+    return any(k in t.lower() for k in ["çiz","resim","görsel","image","foto","art","manzara"])
 
-def clean_image_prompt(p: str) -> str:
-    return f"""
-Ultra realistic, high quality, cinematic lighting.
-{p}
-Photorealistic, ultra detailed, sharp focus.
-"""
+def generate_image(prompt):
+    client = Client("mrfakename/Z-Image-Turbo", token=st.secrets["HF_TOKEN"])
+    r = client.predict(prompt=prompt, width=768, height=768, api_name="/generate_image")
+    return r[0]["url"] if isinstance(r, list) else None
 
-def generate_image(prompt: str):
-    client = Client(
-        "mrfakename/Z-Image-Turbo",
-        token=st.secrets["HF_TOKEN"]
-    )
-
-    result = client.predict(
-        prompt=prompt,
-        height=768,
-        width=768,
-        num_inference_steps=9,
-        seed=0,
-        randomize_seed=True,
-        api_name="/generate_image"
-    )
-
-    if isinstance(result, (list, tuple)) and result:
-        img = result[0]
-        if isinstance(img, dict) and img.get("url"):
-            return img["url"]
-        if isinstance(img, str):
-            return img
-    return None
-
-# ================= GALLERY HELPERS (FIX) =================
-def save_image(username, prompt, image_url):
+# ================= GALLERY =================
+def save_image(prompt, url):
     supabase.table("image_gallery").insert({
-        "username": username,
+        "username": user,
         "prompt": prompt,
-        "image_url": image_url,
+        "image_url": url,
         "created_at": datetime.utcnow().isoformat()
     }).execute()
 
-def load_gallery(username):
-    res = supabase.table("image_gallery") \
-        .select("id,prompt,image_url,created_at") \
-        .eq("username", username) \
+def load_gallery():
+    return supabase.table("image_gallery") \
+        .select("id,prompt,image_url") \
+        .eq("username", user) \
         .order("created_at", desc=True) \
-        .execute()
-    return res.data or []
+        .execute().data or []
 
-def delete_image(img_id):
-    supabase.table("image_gallery").delete().eq("id", img_id).execute()
+def delete_image(i):
+    supabase.table("image_gallery").delete().eq("id", i).execute()
 
-# ================= CONVERSATION HELPERS =================
-def auto_title(text):
-    return " ".join(text.split()[:5]).capitalize()
-
-def create_conversation(username):
-    res = supabase.table("conversations").insert({
-        "username": username,
-        "title": "Yeni sohbet"
-    }).execute()
-    return res.data[0]["id"]
-
-def load_conversations(username):
-    res = supabase.table("conversations") \
-        .select("id,title") \
-        .eq("username", username) \
-        .order("created_at", desc=True) \
-        .execute()
-    return res.data or []
-
-def load_messages(conv_id):
-    res = supabase.table("chat_logs") \
-        .select("role,content") \
-        .eq("conversation_id", conv_id) \
-        .order("created_at") \
-        .execute()
-    return res.data or []
-
-def delete_conversation(conv_id):
-    supabase.table("chat_logs").delete().eq("conversation_id", conv_id).execute()
-    supabase.table("conversations").delete().eq("id", conv_id).execute()
-
-def save_message(username, role, content, conv_id):
-    supabase.table("chat_logs").insert({
-        "username": username,
-        "conversation_id": conv_id,
-        "role": role,
-        "content": content
-    }).execute()
 # ================= SESSION =================
 if "conversation_id" not in st.session_state:
-
-    conversations = load_conversations(user)
-
-    if conversations:
-        last_conv = conversations[0]
-        st.session_state.conversation_id = last_conv["id"]
-        st.session_state.chat = load_messages(last_conv["id"])
+    convs = supabase.table("conversations").select("id").eq("username",user).order("created_at",desc=True).execute().data
+    if convs:
+        st.session_state.conversation_id = convs[0]["id"]
     else:
-        st.session_state.conversation_id = create_conversation(user)
-        st.session_state.chat = []
-
+        st.session_state.conversation_id = supabase.table("conversations").insert({
+            "username": user,
+            "title": "Yeni sohbet"
+        }).execute().data[0]["id"]
+    st.session_state.chat = []
     st.session_state.last_image = None
 
-# 🔒 GALERİ STATE (ŞART)
 if "open_gallery" not in st.session_state:
     st.session_state.open_gallery = False
+
 # ================= SIDEBAR =================
 with st.sidebar:
-    st.markdown("## 💬 Sohbetler")
-
-    for c in load_conversations(user):
-        col1, col2 = st.columns([8,1])
-        if col1.button(c["title"], key=c["id"]):
-            st.session_state.conversation_id = c["id"]
-            st.session_state.chat = load_messages(c["id"])
-            st.session_state.last_image = None
-            st.rerun()
-        if col2.button("🗑️", key=f"del_{c['id']}"):
-            delete_conversation(c["id"])
-            st.rerun()
-
-    st.divider()
-
-    if st.button("➕ Yeni Sohbet"):
-        st.session_state.conversation_id = create_conversation(user)
-        st.session_state.chat = []
-        st.session_state.last_image = None
+    if st.button("🌗 Tema Değiştir"):
+        st.session_state.theme = "light" if dark else "dark"
         st.rerun()
 
     if st.button("🖼️ Galeri"):
@@ -271,21 +178,24 @@ with st.sidebar:
 # ================= GALLERY POPUP =================
 if st.session_state.open_gallery:
     with st.expander("🖼️ Görsel Galeri", expanded=True):
-        images = load_gallery(user)
-
-        if not images:
-            st.info("Henüz görsel yok")
+        imgs = load_gallery()
+        if not imgs:
+            st.info("Boş")
         else:
             cols = st.columns(3)
-            for i, img in enumerate(images):
-                with cols[i % 3]:
-                    st.image(img["image_url"], use_container_width=True)
+            for i,img in enumerate(imgs):
+                with cols[i%3]:
+                    st.markdown(f"""
+                    <div class="image-frame">
+                        <img src="{img['image_url']}" width="100%">
+                    </div>
+                    """, unsafe_allow_html=True)
                     st.caption(img["prompt"])
-                    if st.button("❌ Sil", key=f"del_img_{img['id']}"):
+                    if st.button("❌", key=img["id"]):
                         delete_image(img["id"])
                         st.rerun()
 
-        if st.button("Kapat Galeri"):
+        if st.button("Kapat"):
             st.session_state.open_gallery = False
             st.rerun()
 
@@ -293,55 +203,36 @@ if st.session_state.open_gallery:
 st.title("🤖 Burak GPT")
 
 for m in st.session_state.chat:
-    cls = "chat-user" if m["role"] == "user" else "chat-bot"
-    name = "Sen" if m["role"] == "user" else "Burak GPT"
-    st.markdown(
-        f"<div class='{cls}'><b>{name}:</b> {m['content']}</div>",
-        unsafe_allow_html=True
-    )
+    cls = "chat-user" if m["role"]=="user" else "chat-bot"
+    st.markdown(f"<div class='{cls}'>{m['content']}</div>", unsafe_allow_html=True)
 
 if st.session_state.last_image:
-    st.markdown("<div class='ai-frame'>", unsafe_allow_html=True)
-    st.image(st.session_state.last_image, width=320)
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div class="image-frame">
+        <img src="{st.session_state.last_image}" width="320">
+    </div>
+    """, unsafe_allow_html=True)
 
 # ================= INPUT =================
 txt = st.text_input("Mesajın")
 
 if st.button("Gönder") and txt.strip():
-
-    if len(st.session_state.chat) == 0:
-        supabase.table("conversations").update({
-            "title": auto_title(txt)
-        }).eq("id", st.session_state.conversation_id).execute()
-
-    st.session_state.chat.append({"role": "user", "content": txt})
-    save_message(user, "user", txt, st.session_state.conversation_id)
+    st.session_state.chat.append({"role":"user","content":txt})
 
     if is_image_request(txt):
-        img = generate_image(clean_image_prompt(txt))
+        img = generate_image(txt)
         if img:
             st.session_state.last_image = img
-            save_image(user, txt, img)
+            save_image(txt,img)
             reply = "🖼️ Görsel hazır"
         else:
-            reply = "❌ Görsel üretilemedi"
+            reply = "❌ Hata"
     else:
-        messages = [
-            {
-                "role": m["role"],
-                "content": [{"type": "text", "text": m["content"]}]
-            }
-            for m in st.session_state.chat
-        ]
-
         res = openai_client.responses.create(
             model="gpt-4.1-mini",
-            input=messages
+            input=[{"role":"user","content":txt}]
         )
         reply = res.output_text
 
-    st.session_state.chat.append({"role": "assistant", "content": reply})
-    save_message(user, "assistant", reply, st.session_state.conversation_id)
-
+    st.session_state.chat.append({"role":"assistant","content":reply})
     st.rerun()
