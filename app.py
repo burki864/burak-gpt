@@ -4,6 +4,7 @@ import threading
 import streamlit as st
 from openai import OpenAI
 from gradio_client import Client
+from streamlit_cookies_manager import EncryptedCookieManager
 
 # ================= KEEP AWAKE =================
 def keep_awake():
@@ -35,6 +36,33 @@ st.markdown("""
 }
 </style>
 """, unsafe_allow_html=True)
+
+# ================= COOKIES =================
+cookies = EncryptedCookieManager(
+    prefix="burak_",
+    password=st.secrets["COOKIE_SECRET"]
+)
+
+if not cookies.ready():
+    st.stop()
+
+# ================= LOGIN =================
+if "user" not in st.session_state:
+    st.session_state.user = cookies.get("user")
+
+if not st.session_state.user:
+    st.title("👋 Hoş Geldin")
+    name = st.text_input("Adın nedir?")
+
+    if st.button("Devam") and name.strip():
+        st.session_state.user = name.strip()
+        cookies["user"] = st.session_state.user
+        cookies.save()
+        st.rerun()
+
+    st.stop()
+
+user = st.session_state.user
 
 # ================= API =================
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
@@ -71,7 +99,7 @@ if "chat" not in st.session_state:
     st.session_state.chat = []
 
 # ================= UI =================
-st.title("🤖 Burak GPT")
+st.title(f"🤖 Burak GPT | {user}")
 
 # ===== CHAT =====
 for m in st.session_state.chat:
@@ -79,7 +107,7 @@ for m in st.session_state.chat:
         st.markdown(f"**Sen:** {m['content']}")
     else:
         if m.get("type") == "image":
-            st.image(m["content"], width=350)
+            st.image(m["content"], width=300)
         else:
             st.markdown(f"**Burak GPT:** {m['content']}")
 
@@ -97,7 +125,6 @@ if st.button("Gönder") and txt.strip():
         img = generate_image(txt)
 
         if img:
-            # 👇 GÖRSELİ GERÇEKTEN BAS
             st.session_state.chat.append({
                 "role": "assistant",
                 "type": "image",
@@ -124,3 +151,4 @@ if st.button("Gönder") and txt.strip():
         })
 
     st.rerun()
+
