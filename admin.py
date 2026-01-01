@@ -61,22 +61,22 @@ st.json({
 c1, c2, c3, c4 = st.columns(4)
 
 if c1.button("🚫 Ban"):
-    supabase.table("users").update({"banned": True}).eq("username", selected).execute()
+    supabase.from_("public.users").update({"banned": True}).eq("username", selected).execute()
     st.success("Kullanıcı banlandı")
     st.rerun()
 
 if c2.button("✅ Unban"):
-    supabase.table("users").update({"banned": False}).eq("username", selected).execute()
+    supabase.from_("public.users").update({"banned": False}).eq("username", selected).execute()
     st.success("Ban kaldırıldı")
     st.rerun()
 
 if c3.button("🧹 Soft Delete"):
-    supabase.table("users").update({"deleted": True}).eq("username", selected).execute()
+    supabase.from_("public.users").update({"deleted": True}).eq("username", selected).execute()
     st.success("Kullanıcı silindi (soft)")
     st.rerun()
 
 if c4.button("♻️ Geri Aç"):
-    supabase.table("users").update({"deleted": False}).eq("username", selected).execute()
+    supabase.from_("public.users").update({"deleted": False}).eq("username", selected).execute()
     st.success("Kullanıcı geri açıldı")
     st.rerun()
 
@@ -108,15 +108,15 @@ st.subheader("⚡ Hızlı Filtreler")
 c5, c6, c7 = st.columns(3)
 
 if c5.button("🚫 Sadece Banlılar"):
-    banned = supabase.table("users").select("*").eq("banned", True).execute().data
+    banned = supabase.from_("public.users").select("*").eq("banned", True).execute().data
     st.dataframe(banned)
 
 if c6.button("🧹 Silinenler"):
-    deleted = supabase.table("users").select("*").eq("deleted", True).execute().data
+    deleted = supabase.from_("public.users").select("*").eq("deleted", True).execute().data
     st.dataframe(deleted)
 
 if c7.button("🟢 Online"):
-    online = supabase.table("users").select("*").eq("is_online", True).execute().data
+    online = supabase.from_("public.users").select("*").eq("is_online", True).execute().data
     st.dataframe(online)
 
 # ================= NAV =================
