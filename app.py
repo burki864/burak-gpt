@@ -6,8 +6,7 @@ from openai import OpenAI
 from gradio_client import Client
 from streamlit_cookies_manager import EncryptedCookieManager
 from supabase import create_client
-from datetime import datetime
-
+from datetime import datetime, timezone, timedelta
 # ================= KEEP AWAKE =================
 def keep_awake():
     while True:
@@ -133,16 +132,9 @@ update_last_seen(user)
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 # ================= TIME / DATE =================
-def is_time_request(text):
-    keys = [
-        "saat", "kaçta", "kaç",
-        "tarih", "bugün",
-        "ayın", "günlerden", "ne zaman"
-    ]
-    return any(k in text.lower() for k in keys)
-
 def get_time_reply():
-    now = datetime.now()
+    tr_time = datetime.now(timezone.utc) + timedelta(hours=3)
+
     days_tr = {
         "Monday": "Pazartesi",
         "Tuesday": "Salı",
@@ -152,11 +144,13 @@ def get_time_reply():
         "Saturday": "Cumartesi",
         "Sunday": "Pazar"
     }
+
     return (
-        f"⏰ Saat: **{now.strftime('%H:%M')}**\n\n"
-        f"📅 Tarih: **{now.strftime('%d.%m.%Y')}**\n"
-        f"📆 Gün: **{days_tr[now.strftime('%A')]}**"
+        f"⏰ Saat: **{tr_time.strftime('%H:%M')}**\n\n"
+        f"📅 Tarih: **{tr_time.strftime('%d.%m.%Y')}**\n"
+        f"📆 Gün: **{days_tr[tr_time.strftime('%A')]}**"
     )
+
 
 # ================= IMAGE =================
 def is_image_request(text):
