@@ -1,14 +1,13 @@
 import streamlit as st
-import json, os
 from supabase import create_client
 
 # ================= PAGE =================
-st.set_page_config("Admin Panel","🛠️","wide")
+st.set_page_config("Admin Panel", "🛠️", "wide")
 
 # ================= SUPABASE =================
 supabase = create_client(
     st.secrets["SUPABASE_URL"],
-    st.secrets["SUPABASE_KEY"]
+    st.secrets["SUPABASE_KEY"]  # service_role_key
 )
 
 # ================= AUTH =================
@@ -26,46 +25,60 @@ if not st.session_state.admin:
             st.error("❌ Yetkisiz")
     st.stop()
 
-# ================= USERS (LOCAL JSON – BOZULMADI) =================
+# ================= LOAD USERS =================
 def load_users():
-    if not os.path.exists("users.json"):
-        return {}
-    return json.load(open("users.json","r"))
-
-def save_users(u):
-    json.dump(u, open("users.json","w"), indent=2)
+    res = supabase.table("users") \
+        .select("*") \
+        .order("created_at", desc=True) \
+        .execute()
+    return res.data or []
 
 users = load_users()
 
 st.title("🛠️ Admin Panel")
 
 if not users:
-    st.info("Henüz kullanıcı yok")
+    st.info("Kullanıcı bulunamadı")
     st.stop()
 
 # ================= USER SELECT =================
-user = st.selectbox("👤 Kullanıcı", users.keys())
-info = users[user]
+usernames = [u["username"] for u in users]
+selected = st.selectbox("👤 Kullanıcı Seç", usernames)
 
-st.write("📌 Durum:", info)
+user = next(u for u in users if u["username"] == selected)
 
-# ================= ACTION BUTTONS =================
-c1, c2, c3 = st.columns(3)
+# ================= USER INFO =================
+st.subheader("📌 Kullanıcı Bilgisi")
+st.json({
+    "username": user["username"],
+    "banned": user.get("banned"),
+    "deleted": user.get("deleted"),
+    "is_online": user.get("is_online"),
+    "last_seen": user.get("last_seen")
+})
+
+# ================= ACTIONS =================
+c1, c2, c3, c4 = st.columns(4)
 
 if c1.button("🚫 Ban"):
-    info["banned"] = True
+    supabase.table("users").update({"banned": True}).eq("username", selected).execute()
+    st.success("Kullanıcı banlandı")
+    st.rerun()
 
 if c2.button("✅ Unban"):
-    info["banned"] = False
+    supabase.table("users").update({"banned": False}).eq("username", selected).execute()
+    st.success("Ban kaldırıldı")
+    st.rerun()
 
 if c3.button("🧹 Soft Delete"):
-    info["deleted"] = True
+    supabase.table("users").update({"deleted": True}).eq("username", selected).execute()
+    st.success("Kullanıcı silindi (soft)")
+    st.rerun()
 
-if st.button("♻️ Geri Aç"):
-    info["deleted"] = False
-
-save_users(users)
-st.success("✔️ Güncellendi")
+if c4.button("♻️ Geri Aç"):
+    supabase.table("users").update({"deleted": False}).eq("username", selected).execute()
+    st.success("Kullanıcı geri açıldı")
+    st.rerun()
 
 # ================= CHAT REPLAY =================
 st.divider()
@@ -76,18 +89,35 @@ def load_conversation(username):
         .select("conversation") \
         .eq("username", username) \
         .execute()
-
     if res.data:
         return res.data[0]["conversation"]
     return None
 
-conversation = load_conversation(user)
+conversation = load_conversation(selected)
 
 if conversation:
-    with st.expander("🗂️ Konuşmayı Göster / Gizle", expanded=False):
+    with st.expander("🗂️ Konuşmayı Göster / Gizle"):
         st.text(conversation)
 else:
-    st.info("Bu kullanıcıya ait sohbet kaydı yok")
+    st.info("Bu kullanıcıya ait sohbet yok")
+
+# ================= QUICK FILTERS =================
+st.divider()
+st.subheader("⚡ Hızlı Filtreler")
+
+c5, c6, c7 = st.columns(3)
+
+if c5.button("🚫 Sadece Banlılar"):
+    banned = supabase.table("users").select("*").eq("banned", True).execute().data
+    st.dataframe(banned)
+
+if c6.button("🧹 Silinenler"):
+    deleted = supabase.table("users").select("*").eq("deleted", True).execute().data
+    st.dataframe(deleted)
+
+if c7.button("🟢 Online"):
+    online = supabase.table("users").select("*").eq("is_online", True).execute().data
+    st.dataframe(online)
 
 # ================= NAV =================
 st.divider()
