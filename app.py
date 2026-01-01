@@ -185,10 +185,21 @@ cartoon, anime, illustration, watermark, low quality
 
 def generate_image(prompt: str, progress):
     client = Client("burak12321/burak-gpt-image")
-    progress.progress(30)
+
+    progress.progress(25)
     result = client.predict(prompt)
-    progress.progress(90)
-    return result[0] if isinstance(result, list) else result
+    progress.progress(80)
+
+    # 🔒 TEMİZ VE GARANTİLİ ÇIKIŞ
+    if isinstance(result, list) and result:
+        return str(result[0])
+
+    if isinstance(result, str):
+        return result
+
+    # beklenmeyen format
+    return None
+
 
 # ================= UI =================
 st.title("🤖 Burak GPT")
