@@ -44,7 +44,7 @@ def toast(msg):
 supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
 # ================= COOKIES =================
-cookies = EncryptedCookieManager(prefix="burak_v6_", password=st.secrets["COOKIE_SECRET"])
+cookies = EncryptedCookieManager(prefix="burak_v5_", password=st.secrets["COOKIE_SECRET"])
 if not cookies.ready():
     st.stop()
 
