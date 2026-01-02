@@ -87,14 +87,26 @@ def get_user(username):
     return r.data[0] if r.data else None
 
 def upsert_user(username):
-    supabase.table("users").upsert({
-        "username": username,
-        "banned": False,
-        "deleted": False,
-        "warning_count": 0,
-        "last_seen": datetime.utcnow().isoformat()
-    }, on_conflict="username").execute()
+    existing = supabase.table("users") \
+        .select("username") \
+        .eq("username", username) \
+        .execute()
 
+    if not existing.data:
+        # kullanıcı yok → insert
+        supabase.table("users").insert({
+            "username": username,
+            "banned": False,
+            "deleted": False,
+            "warning_count": 0,
+            "created_at": datetime.utcnow().isoformat(),
+            "last_seen": datetime.utcnow().isoformat()
+        }).execute()
+    else:
+        # kullanıcı var → sadece last_seen güncelle
+        supabase.table("users").update({
+            "last_seen": datetime.utcnow().isoformat()
+        }).eq("username", username).execute()
 # ================= COOKIES =================
 cookies = EncryptedCookieManager(
     prefix="burak_v5_",
