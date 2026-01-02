@@ -5,6 +5,7 @@ from streamlit_cookies_manager import EncryptedCookieManager
 from supabase import create_client
 from datetime import datetime
 from gradio_client import Client
+from zoneinfo import ZoneInfo
 
 # ================= KEEP AWAKE =================
 def keep_awake():
@@ -35,13 +36,11 @@ st.markdown("""
  padding:12px 16px; border-radius:18px;
  margin:8px 0; max-width:70%;
 }
-.input-box input {
+input {
  background:black !important;
  color:white !important;
 }
-.image-wrap {
- position:relative; display:inline-block;
-}
+.image-wrap { position:relative; display:inline-block; }
 .image-wrap a {
  position:absolute; bottom:10px; right:10px;
  background:#000a; color:white;
@@ -112,7 +111,11 @@ def new_conversation(title="Yeni Sohbet"):
         "title": title,
         "created_at": datetime.utcnow().isoformat()
     }).execute()
+
     st.session_state.conversation_id = cid
+
+    if "chat" in st.session_state:
+        del st.session_state["chat"]
     st.session_state.chat = []
 
 def get_conversations():
@@ -162,31 +165,62 @@ for m in st.session_state.chat:
 
 # ================= INPUT =================
 with st.form("chat", clear_on_submit=True):
-    txt = st.text_input("Mesajın", key="msg")
+    txt = st.text_input("Mesajın")
     send = st.form_submit_button("Gönder")
 
 def is_image(t):
     return any(k in t.lower() for k in ["çiz", "resim", "image", "draw", "görsel"])
 
+# ================= SAAT ÖZELLİĞİ =================
+def get_time_answer(text):
+    t = text.lower()
+    zones = {
+        "türkiye": ("Türkiye", "Europe/Istanbul"),
+        "abd": ("ABD", "America/New_York"),
+        "amerika": ("ABD", "America/New_York"),
+        "ingiltere": ("İngiltere", "Europe/London"),
+        "almanya": ("Almanya", "Europe/Berlin"),
+        "fransa": ("Fransa", "Europe/Paris"),
+    }
+
+    if "saat" not in t:
+        return None
+
+    for k, (name, zone) in zones.items():
+        if k in t:
+            now = datetime.now(ZoneInfo(zone)).strftime("%H:%M")
+            return f"🕒 {name} şu an saat **{now}**"
+
+    now = datetime.now(ZoneInfo("Europe/Istanbul")).strftime("%H:%M")
+    return f"🕒 Şu an Türkiye’de saat **{now}**"
+
+# ================= SEND =================
 if send and txt.strip():
 
     if not st.session_state.conversation_id:
-        title = txt[:30]
-        new_conversation(title)
+        new_conversation(txt[:30])
 
-    st.session_state.chat.append({"role":"user","content":txt})
+    st.session_state.chat.append({"role": "user", "content": txt})
+
     supabase.table("chats").insert({
         "conversation_id": st.session_state.conversation_id,
         "username": user,
-        "role":"user",
-        "content":txt,
+        "role": "user",
+        "content": txt,
         "created_at": datetime.utcnow().isoformat()
     }).execute()
 
-    if is_image(txt):
+    time_reply = get_time_answer(txt)
+
+    if time_reply:
+        reply = time_reply
+
+    elif is_image(txt):
         img = hf_client.predict(prompt=txt, api_name="/generate_image")
         url = img[0]["url"] if isinstance(img, list) else img
         st.session_state.chat.append({"role":"assistant","content":url,"type":"image"})
+        st.rerun()
+
     else:
         try:
             r = openai_client.responses.create(
@@ -197,6 +231,5 @@ if send and txt.strip():
         except:
             reply = "⚠️ Geçici olarak cevap veremiyorum."
 
-        st.session_state.chat.append({"role":"assistant","content":reply})
-
+    st.session_state.chat.append({"role": "assistant", "content": reply})
     st.rerun()
