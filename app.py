@@ -1,4 +1,5 @@
-import time, requests, threading, uuid
+import time, requests, threading, uuid, base64
+from io import BytesIO
 import streamlit as st
 from openai import OpenAI
 from streamlit_cookies_manager import EncryptedCookieManager
@@ -102,6 +103,12 @@ if "user" not in st.session_state:
 
 user = st.session_state.user
 
+# ================= SESSION DEFAULTS =================
+if "conversation_id" not in st.session_state:
+    st.session_state.conversation_id = None
+if "chat" not in st.session_state:
+    st.session_state.chat = []
+
 # ================= CONVERSATIONS =================
 def new_conversation(title="Yeni Sohbet"):
     cid = str(uuid.uuid4())
@@ -111,12 +118,8 @@ def new_conversation(title="Yeni Sohbet"):
         "title": title,
         "created_at": datetime.utcnow().isoformat()
     }).execute()
-
     st.session_state.conversation_id = cid
-
-    if "chat" in st.session_state:
-        del st.session_state["chat"]
-    st.session_state.chat.clear()
+    st.session_state.chat = []
 
 def get_conversations():
     return supabase.table("conversations") \
@@ -127,10 +130,6 @@ def load_messages(cid):
     return supabase.table("chats") \
         .select("*").eq("conversation_id", cid) \
         .order("created_at").execute().data
-
-# ================= SESSION =================
-st.session_state.setdefault("conversation_id", None)
-st.session_state.setdefault("chat", [])
 
 # ================= SIDEBAR =================
 st.sidebar.title("👤 " + user)
@@ -147,33 +146,23 @@ for c in get_conversations():
         st.session_state.chat = load_messages(c["id"])
         st.rerun()
 
-# ================= MAIN =================
-st.markdown("<h1 style='text-align:center'>BurakGPT</h1>", unsafe_allow_html=True)
+# ================= IMAGE BASE64 =================
+def image_url_to_base64(url):
+    try:
+        r = requests.get(url, timeout=15)
+        if r.status_code == 200:
+            b64 = base64.b64encode(r.content).decode()
+            return f"data:image/png;base64,{b64}"
+    except:
+        pass
+    return None
 
-for m in st.session_state.chat:
-    if m.get("type") == "image":
-        st.markdown(f"""
-        <div class="image-wrap">
-            <img src="{m['content']}" width="350">
-            <a href="{m['content']}" download>⬇️ İndir</a>
-        </div>
-        """, unsafe_allow_html=True)
-    elif m["role"] == "user":
-        st.markdown(f"<div class='chat-user'>🧑 {m['content']}</div>", unsafe_allow_html=True)
-    else:
-        st.markdown(f"<div class='chat-ai'>🤖 {m['content']}</div>", unsafe_allow_html=True)
-
-# ================= INPUT =================
-with st.form("chat_form", clear_on_submit=True):
-    txt = st.text_input("Mesajın")
-    send = st.form_submit_button("Gönder")
-
-def is_image(t):
-    return any(k in t.lower() for k in ["çiz", "resim", "image", "draw", "görsel"])
-
-# ================= SAAT ÖZELLİĞİ =================
+# ================= TIME FEATURE =================
 def get_time_answer(text):
     t = text.lower()
+    if "saat" not in t:
+        return None
+
     zones = {
         "türkiye": ("Türkiye", "Europe/Istanbul"),
         "abd": ("ABD", "America/New_York"),
@@ -183,16 +172,39 @@ def get_time_answer(text):
         "fransa": ("Fransa", "Europe/Paris"),
     }
 
-    if "saat" not in t:
-        return None
-
     for k, (name, zone) in zones.items():
         if k in t:
             now = datetime.now(ZoneInfo(zone)).strftime("%H:%M")
             return f"🕒 {name} şu an saat **{now}**"
 
     now = datetime.now(ZoneInfo("Europe/Istanbul")).strftime("%H:%M")
-    return f"🕒 Şu an Türkiye’de saat **{now}**"
+    return f"🕒 Türkiye’de şu an saat **{now}**"
+
+def is_image(t):
+    return any(k in t.lower() for k in ["çiz", "resim", "image", "draw", "görsel"])
+
+# ================= MAIN =================
+st.markdown("<h1 style='text-align:center'>BurakGPT</h1>", unsafe_allow_html=True)
+
+for m in st.session_state.chat:
+    if m.get("type") == "image":
+        b64 = image_url_to_base64(m["content"])
+        if b64:
+            st.markdown(f"""
+            <div class="image-wrap">
+                <img src="{b64}" width="350">
+                <a href="{b64}" download="burakgpt.png">⬇️ İndir</a>
+            </div>
+            """, unsafe_allow_html=True)
+    elif m["role"] == "user":
+        st.markdown(f"<div class='chat-user'>🧑 {m['content']}</div>", unsafe_allow_html=True)
+    else:
+        st.markdown(f"<div class='chat-ai'>🤖 {m['content']}</div>", unsafe_allow_html=True)
+
+# ================= INPUT =================
+with st.form("chat_form", clear_on_submit=True):
+    txt = st.text_input("Mesajın")
+    send = st.form_submit_button("Gönder")
 
 # ================= SEND =================
 if send and txt.strip():
@@ -210,18 +222,19 @@ if send and txt.strip():
         "created_at": datetime.utcnow().isoformat()
     }).execute()
 
-    time_reply = get_time_answer(txt)
+    reply = get_time_answer(txt)
 
-    if time_reply:
-        reply = time_reply
-
-    elif is_image(txt):
+    if not reply and is_image(txt):
         img = hf_client.predict(prompt=txt, api_name="/generate_image")
         url = img[0]["url"] if isinstance(img, list) else img
-        st.session_state.chat.append({"role":"assistant","content":url,"type":"image"})
+        st.session_state.chat.append({
+            "role": "assistant",
+            "content": url,
+            "type": "image"
+        })
         st.rerun()
 
-    else:
+    if not reply:
         try:
             r = openai_client.responses.create(
                 model="gpt-4.1-mini",
@@ -231,5 +244,9 @@ if send and txt.strip():
         except:
             reply = "⚠️ Geçici olarak cevap veremiyorum."
 
-    st.session_state.chat.append({"role": "assistant", "content": reply})
+    st.session_state.chat.append({
+        "role": "assistant",
+        "content": reply
+    })
+
     st.rerun()
