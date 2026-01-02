@@ -49,21 +49,35 @@ if not cookies.ready():
     st.stop()
 
 # ================= LOGIN =================
+def get_user(username):
+    r = supabase.table("users").select("*").eq("username", username).execute()
+    return r.data[0] if r.data else None
+
+def ensure_user(username):
+    if not get_user(username):
+        supabase.table("users").insert({
+            "username": username,
+            "banned": False,
+            "deleted": False,
+            "created_at": datetime.utcnow().isoformat()
+        }).execute()
+
+# ================= LOGIN =================
 if "user" not in st.session_state:
     st.session_state.user = cookies.get("user")
 
-if not st.session_state.user:
+if st.session_state.user:
+    ensure_user(st.session_state.user)
+else:
     st.title("👋 Hoş Geldin")
     name = st.text_input("Adın nedir?")
     if st.button("Devam") and name.strip():
         st.session_state.user = name.strip()
         cookies["user"] = name.strip()
         cookies.save()
+        ensure_user(name.strip())
         st.rerun()
     st.stop()
-
-user = st.session_state.user
-
 # ================= CONVERSATIONS =================
 def get_conversations():
     return supabase.table("conversations")\
