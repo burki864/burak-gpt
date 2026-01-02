@@ -8,6 +8,7 @@ from openai import OpenAI
 from streamlit_cookies_manager import EncryptedCookieManager
 from supabase import create_client
 from datetime import datetime
+from gradio_client import Client
 
 # ================= KEEP AWAKE =================
 def keep_awake():
@@ -40,14 +41,45 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-def toast(msg):
-    st.markdown(f"<div class='toast'>⚠️ {msg}</div>", unsafe_allow_html=True)
-
 # ================= SUPABASE =================
 supabase = create_client(
     st.secrets["SUPABASE_URL"],
     st.secrets["SUPABASE_KEY"]
 )
+
+# ================= HF CLIENT =================
+hf_client = Client(
+    "mrfakename/Z-Image-Turbo",
+    token=st.secrets["HF_TOKEN"]
+)
+
+# ================= UTILS =================
+def is_image_request(text):
+    keys = ["çiz", "resim", "görsel", "draw", "image", "foto"]
+    return any(k in text.lower() for k in keys)
+
+def translate_to_en(text):
+    r = OpenAI(api_key=st.secrets["OPENAI_API_KEY"]).responses.create(
+        model="gpt-4.1-mini",
+        input=f"Translate this into a short English prompt for image generation: {text}"
+    )
+    return r.output_text.strip()
+
+def generate_image(prompt_en):
+    result = hf_client.predict(
+        prompt=prompt_en,
+        height=512,
+        width=512,
+        num_inference_steps=8,
+        randomize_seed=True,
+        api_name="/generate_image"
+    )
+    if isinstance(result, list) and result:
+        if isinstance(result[0], dict) and "url" in result[0]:
+            return result[0]["url"]
+        if isinstance(result[0], str):
+            return result[0]
+    return None
 
 # ================= USERS =================
 def get_user(username):
@@ -71,30 +103,15 @@ cookies = EncryptedCookieManager(
 if not cookies.ready():
     st.stop()
 
-# ================= LOGIN CORE (TEK NOKTA) =================
 def ensure_login():
-    # 1️⃣ v5 cookie
     user = cookies.get("user")
     if user:
         st.session_state.user = user
         upsert_user(user)
         return True
-
-    # 2️⃣ legacy cookie’ler
-    for p in ["burak_v4_", "burak_v3_"]:
-        legacy = EncryptedCookieManager(prefix=p, password=st.secrets["COOKIE_SECRET"])
-        if legacy.ready():
-            u = legacy.get("user")
-            if u:
-                st.session_state.user = u
-                cookies["user"] = u
-                cookies.save()
-                upsert_user(u)
-                return True
-
     return False
 
-# ================= LOGIN UI =================
+# ================= LOGIN =================
 if "user" not in st.session_state:
     if not ensure_login():
         st.title("👋 Hoş Geldin")
@@ -139,7 +156,7 @@ def load_messages(cid):
         .eq("conversation_id", cid)\
         .order("created_at")\
         .execute()
-    return [{"role":m["role"],"content":m["content"]} for m in r.data]
+    return r.data
 
 # ================= SESSION =================
 if "conversation_id" not in st.session_state:
@@ -163,31 +180,26 @@ for c in get_conversations():
 
 # ================= MAIN =================
 st.markdown("<h1 style='text-align:center'>BurakGPT</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center;opacity:.6'>Bugün ne yapalım?</p>", unsafe_allow_html=True)
 
-# --- Chat geçmişi ---
+# CHAT HISTORY
 for m in st.session_state.chat:
-    st.markdown(
-        f"**{'Sen' if m['role'] == 'user' else 'BurakGPT'}:** {m['content']}"
-    )
+    if m["role"] == "assistant" and m.get("type") == "image":
+        st.image(m["content"], width=350)
+    else:
+        st.markdown(f"**{'Sen' if m['role']=='user' else 'BurakGPT'}:** {m['content']}")
 
-# --- Mesaj gönderme (FORM KULLANILIR) ---
+# ================= INPUT =================
 with st.form("chat_form", clear_on_submit=True):
     txt = st.text_input("Mesajın")
     send = st.form_submit_button("Gönder")
 
 if send and txt.strip():
 
-    # sohbet yoksa oluştur
     if not st.session_state.conversation_id:
         new_conversation()
 
-    # USER MESSAGE
-    st.session_state.chat.append({
-        "role": "user",
-        "content": txt
-    })
-
+    # USER
+    st.session_state.chat.append({"role":"user","content":txt})
     supabase.table("chats").insert({
         "conversation_id": st.session_state.conversation_id,
         "username": user,
@@ -196,27 +208,42 @@ if send and txt.strip():
         "created_at": datetime.utcnow().isoformat()
     }).execute()
 
-    # AI RESPONSE
-    r = OpenAI(
-        api_key=st.secrets["OPENAI_API_KEY"]
-    ).responses.create(
-        model="gpt-4.1-mini",
-        input=txt
-    )
+    # IMAGE OR TEXT
+    if is_image_request(txt):
+        prompt_en = translate_to_en(txt)
+        img_url = generate_image(prompt_en)
 
-    reply = r.output_text
+        if img_url:
+            st.session_state.chat.append({
+                "role":"assistant",
+                "content": img_url,
+                "type": "image"
+            })
+            supabase.table("chats").insert({
+                "conversation_id": st.session_state.conversation_id,
+                "username": user,
+                "role": "assistant",
+                "content": img_url,
+                "type": "image",
+                "created_at": datetime.utcnow().isoformat()
+            }).execute()
+    else:
+        r = OpenAI(api_key=st.secrets["OPENAI_API_KEY"]).responses.create(
+            model="gpt-4.1-mini",
+            input=txt
+        )
+        reply = r.output_text
 
-    st.session_state.chat.append({
-        "role": "assistant",
-        "content": reply
-    })
-
-    supabase.table("chats").insert({
-        "conversation_id": st.session_state.conversation_id,
-        "username": user,
-        "role": "assistant",
-        "content": reply,
-        "created_at": datetime.utcnow().isoformat()
-    }).execute()
+        st.session_state.chat.append({
+            "role":"assistant",
+            "content": reply
+        })
+        supabase.table("chats").insert({
+            "conversation_id": st.session_state.conversation_id,
+            "username": user,
+            "role": "assistant",
+            "content": reply,
+            "created_at": datetime.utcnow().isoformat()
+        }).execute()
 
     st.rerun()
