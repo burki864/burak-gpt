@@ -164,7 +164,7 @@ for m in st.session_state.chat:
         st.markdown(f"<div class='chat-ai'>🤖 {m['content']}</div>", unsafe_allow_html=True)
 
 # ================= INPUT =================
-with st.form("chat", clear_on_submit=True):
+with st.form("chat_form", clear_on_submit=True):
     txt = st.text_input("Mesajın")
     send = st.form_submit_button("Gönder")
 
