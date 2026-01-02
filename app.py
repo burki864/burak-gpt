@@ -165,16 +165,29 @@ for c in get_conversations():
 st.markdown("<h1 style='text-align:center'>BurakGPT</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align:center;opacity:.6'>Bugün ne yapalım?</p>", unsafe_allow_html=True)
 
+# --- Chat geçmişi ---
 for m in st.session_state.chat:
-    st.markdown(f"**{'Sen' if m['role']=='user' else 'BurakGPT'}:** {m['content']}")
+    st.markdown(
+        f"**{'Sen' if m['role'] == 'user' else 'BurakGPT'}:** {m['content']}"
+    )
 
-txt = st.text_input("Mesajın", key="input")
+# --- Mesaj gönderme (FORM KULLANILIR) ---
+with st.form("chat_form", clear_on_submit=True):
+    txt = st.text_input("Mesajın")
+    send = st.form_submit_button("Gönder")
 
-if st.button("Gönder") and txt.strip():
+if send and txt.strip():
+
+    # sohbet yoksa oluştur
     if not st.session_state.conversation_id:
         new_conversation()
 
-    st.session_state.chat.append({"role":"user","content":txt})
+    # USER MESSAGE
+    st.session_state.chat.append({
+        "role": "user",
+        "content": txt
+    })
+
     supabase.table("chats").insert({
         "conversation_id": st.session_state.conversation_id,
         "username": user,
@@ -183,13 +196,21 @@ if st.button("Gönder") and txt.strip():
         "created_at": datetime.utcnow().isoformat()
     }).execute()
 
-    r = OpenAI(api_key=st.secrets["OPENAI_API_KEY"]).responses.create(
+    # AI RESPONSE
+    r = OpenAI(
+        api_key=st.secrets["OPENAI_API_KEY"]
+    ).responses.create(
         model="gpt-4.1-mini",
         input=txt
     )
+
     reply = r.output_text
 
-    st.session_state.chat.append({"role":"assistant","content":reply})
+    st.session_state.chat.append({
+        "role": "assistant",
+        "content": reply
+    })
+
     supabase.table("chats").insert({
         "conversation_id": st.session_state.conversation_id,
         "username": user,
@@ -198,5 +219,4 @@ if st.button("Gönder") and txt.strip():
         "created_at": datetime.utcnow().isoformat()
     }).execute()
 
-    st.session_state.input = ""  # input temizlenir
     st.rerun()
