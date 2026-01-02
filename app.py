@@ -116,7 +116,7 @@ def new_conversation(title="Yeni Sohbet"):
 
     if "chat" in st.session_state:
         del st.session_state["chat"]
-    st.session_state.chat = []
+    st.session_state.chat.clear()
 
 def get_conversations():
     return supabase.table("conversations") \
