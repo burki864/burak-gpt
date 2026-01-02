@@ -49,19 +49,27 @@ if not cookies.ready():
     st.stop()
 
 # ================= LOGIN =================
-def get_user(username):
-    r = supabase.table("users").select("*").eq("username", username).execute()
-    return r.data[0] if r.data else None
+def ensure_login():
+    if "user" not in st.session_state:
+        st.session_state.user = cookies.get("user")
 
-def ensure_user(username):
-    if not get_user(username):
-        supabase.table("users").insert({
-            "username": username,
-            "banned": False,
-            "deleted": False,
-            "created_at": datetime.utcnow().isoformat()
-        }).execute()
+    if st.session_state.user:
+        upsert_user(st.session_state.user)
+        return True
 
+    # legacy cookie kontrolü
+    for p in ["burak_v3_", "burak_v4_"]:
+        legacy = EncryptedCookieManager(prefix=p, password=st.secrets["COOKIE_SECRET"])
+        if legacy.ready():
+            u = legacy.get("user")
+            if u:
+                st.session_state.user = u
+                cookies["user"] = u
+                cookies.save()
+                upsert_user(u)
+                return True
+
+    return False
 # ================= LOGIN =================
 if "user" not in st.session_state:
     st.session_state.user = cookies.get("user")
