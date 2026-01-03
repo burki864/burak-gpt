@@ -35,7 +35,7 @@ if not cookies.ready():
 # ================= LEGACY COOKIE MIGRATION =================
 def find_legacy_user():
     for v in COOKIE_VERSIONS:
-        legacy = EncryptedCookieManager(
+        cookies = EncryptedCookieManager(
             prefix=f"burak_{v}_",
             password=COOKIE_SECRET
         )
