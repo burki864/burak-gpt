@@ -21,6 +21,7 @@ openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 hf_client = Client("mrfakename/Z-Image-Turbo", token=st.secrets["HF_TOKEN"])
 
 # ================= COOKIES =================
+COOKIE_SECRET = st.secrets["COOKIE_SECRET"]
 COOKIE_PREFIXES = [
     "burak_v1_",
     "burak_v2_",
@@ -30,15 +31,28 @@ COOKIE_PREFIXES = [
     "burak_v6_"
 ]
 
+cookies = EncryptedCookieManager(prefix="burak_v6_", password=COOKIE_SECRET)
+if not cookies.ready():
+    st.stop()
+
 def find_existing_user():
     for p in COOKIE_PREFIXES:
-        c = EncryptedCookieManager(prefix=p, password=st.secrets["COOKIE_SECRET"])
+        c = EncryptedCookieManager(prefix=p, password=COOKIE_SECRET)
         if not c.ready():
             continue
         u = c.get("user")
         if u:
             return u
     return None
+
+# ================= IMAGE HELPER =================
+def render_hf_image(result):
+    if isinstance(result, dict) and "image" in result:
+        return BytesIO(base64.b64decode(result["image"]))
+    if isinstance(result, bytes):
+        return BytesIO(result)
+    return None
+
 # ================= USER GUARD =================
 def user_guard(username):
     r = supabase.table("users").select("*").eq("username", username).limit(1).execute()
@@ -68,22 +82,18 @@ def user_guard(username):
             st.stop()
 
     return u
+
 # ================= LOGIN =================
 if "user" not in st.session_state:
+    existing = find_existing_user()
 
-    # 🔍 TÜM COOKIE VERSİYONLARINI TARA
-    existing_user = find_existing_user()
-
-    if existing_user:
-        # ✅ ESKİ KULLANICIYI KORU
-        cookies["user"] = existing_user  # v6'ya taşı
+    if existing:
+        cookies["user"] = existing
         cookies.save()
-        st.session_state.user = existing_user
+        st.session_state.user = existing
         st.rerun()
 
-    # 🆕 YENİ KULLANICI
     st.title("👤 Giriş")
-
     name = st.text_input("Kullanıcı adı")
 
     if st.button("Giriş"):
@@ -92,13 +102,10 @@ if "user" not in st.session_state:
             st.stop()
 
         r = supabase.table("users").select("username").eq("username", name).execute()
-
-        # ❌ AYNI İSİM VARSA GİRİŞ YOK
         if r.data:
             st.error("❌ Bu kullanıcı adı zaten kullanımda")
             st.stop()
 
-        # ✅ YENİ KAYIT
         supabase.table("users").insert({
             "username": name,
             "created_at": datetime.utcnow().isoformat(),
@@ -112,12 +119,13 @@ if "user" not in st.session_state:
         st.rerun()
 
     st.stop()
+
 # ================= SESSION USER =================
 user = st.session_state.user
 me = user_guard(user)
 
 # ================= ADMIN PANEL =================
-if me.get("is_admin"):
+if me and me.get("is_admin"):
     with st.sidebar.expander("🛠️ Admin Panel"):
         users = supabase.table("users").select("username").execute().data
         target = st.selectbox("Kullanıcı", [u["username"] for u in users])
@@ -128,7 +136,9 @@ if me.get("is_admin"):
             supabase.table("users").update({
                 "banned": True,
                 "ban_reason": reason,
-                "ban_until": (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat() if minutes else None
+                "ban_until": (
+                    datetime.now(timezone.utc) + timedelta(minutes=minutes)
+                ).isoformat() if minutes else None
             }).eq("username", target).execute()
             st.success("Banlandı")
 
@@ -156,10 +166,11 @@ for m in st.session_state.chat:
     )
 
 # ================= INPUT =================
-with st.form("f", clear_on_submit=True):
+with st.form("chat_form", clear_on_submit=True):
     txt = st.text_input("Mesajın")
     send = st.form_submit_button("Gönder")
 
+# ================= SEND =================
 if send and txt:
     if len(st.session_state.chat) >= 2 and \
        st.session_state.chat[-1]["content"] == txt and \
@@ -169,21 +180,29 @@ if send and txt:
 
     st.session_state.chat.append({"role": "user", "content": txt})
 
-    if any(k in txt.lower() for k in ["çiz","görsel","resim","image"]):
-    try:
-        result = hf_client.predict(prompt=txt, api_name="/generate_image")
+    if any(k in txt.lower() for k in ["çiz", "görsel", "resim", "image"]):
+        try:
+            result = hf_client.predict(prompt=txt, api_name="/generate_image")
+            img_io = render_hf_image(result)
 
-        img_io = render_hf_image(result)
+            if img_io:
+                st.session_state.chat.append({
+                    "role": "assistant",
+                    "content": "🖼️ Oluşturulan görsel:"
+                })
+                st.image(img_io, use_container_width=True)
+                st.rerun()
+            else:
+                reply = "⚠️ Görsel üretildi ama gösterilemedi"
 
-        if img_io:
-            st.session_state.chat.append({
-                "role": "assistant",
-                "content": "🖼️ Oluşturulan görsel:"
-            })
-            st.image(img_io, use_container_width=True)
-            reply = " "
-        else:
-            reply = "⚠️ Görsel üretildi ama gösterilemedi"
+        except Exception:
+            reply = "❌ Görsel üretim hatası"
+    else:
+        r = openai_client.responses.create(
+            model="gpt-4.1-mini",
+            input=txt
+        )
+        reply = r.output_text
 
-    except Exception as e:
-        reply = "❌ Görsel üretim hatası"
+    st.session_state.chat.append({"role": "assistant", "content": reply})
+    st.rerun()
