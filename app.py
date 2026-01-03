@@ -18,8 +18,12 @@ supabase = create_client(
 
 # ================= MODELS =================
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-hf_client = Client("mrfakename/Z-Image-Turbo", token=st.secrets["HF_TOKEN"])
-
+@st.cache_resource(show_spinner=False)
+def get_hf_client():
+    return Client(
+        "mrfakename/Z-Image-Turbo",
+        token=st.secrets["HF_TOKEN"]
+    )
 # ================= COOKIES =================
 COOKIE_SECRET = st.secrets["COOKIE_SECRET"]
 
