@@ -123,7 +123,8 @@ def user_guard(username):
 
 # ================= LOGIN =================
 if "user" not in st.session_state:
-    existing = find_existing_user() or find_legacy_user()
+
+    existing = find_existing_user()
     if existing:
         st.session_state.user = existing
         st.rerun()
@@ -161,7 +162,6 @@ if "user" not in st.session_state:
         st.rerun()
 
     st.stop()
-
 # ================= SESSION USER =================
 user = st.session_state.user
 me = user_guard(user)
