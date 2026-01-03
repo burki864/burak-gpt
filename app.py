@@ -22,7 +22,6 @@ hf_client = Client("mrfakename/Z-Image-Turbo", token=st.secrets["HF_TOKEN"])
 
 # ================= COOKIES =================
 COOKIE_SECRET = st.secrets["COOKIE_SECRET"]
-COOKIE_VERSIONS = ["v1", "v2", "v3", "v4", "v5", "v6"]
 
 cookies = EncryptedCookieManager(
     prefix="burak_",
@@ -32,28 +31,26 @@ cookies = EncryptedCookieManager(
 if not cookies.ready():
     st.stop()
 
-# ================= LEGACY COOKIE MIGRATION =================
-def find_legacy_user():
-    for v in COOKIE_VERSIONS:
-        cookies = EncryptedCookieManager(
-            prefix=f"burak_{v}_",
-            password=COOKIE_SECRET
-        )
-        if not legacy.ready():
-            continue
-
-        u = legacy.get("user")
+# ================= COOKIE + LEGACY SCAN =================
+def find_existing_user():
+    """
+    v1 → v6 dahil eski tüm kullanıcıları
+    TEK CookieManager üstünden tarar
+    """
+    for key in [
+        "v6_user",
+        "v5_user",
+        "v4_user",
+        "v3_user",
+        "v2_user",
+        "v1_user",
+        "user"
+    ]:
+        u = cookies.get(key)
         if u:
             cookies.set("v6_user", u)
             cookies.save()
             return u
-    return None
-
-# ================= COOKIE SCAN =================
-def find_existing_user():
-    u = cookies.get("v6_user")
-    if u:
-        return u
     return None
 
 # ================= DEVICE ID =================
@@ -162,6 +159,7 @@ if "user" not in st.session_state:
         st.rerun()
 
     st.stop()
+
 # ================= SESSION USER =================
 user = st.session_state.user
 me = user_guard(user)
