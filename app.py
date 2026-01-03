@@ -169,15 +169,21 @@ if send and txt:
 
     st.session_state.chat.append({"role": "user", "content": txt})
 
-    if any(k in txt.lower() for k in ["çiz", "görsel", "resim", "image"]):
-        hf_client.predict(prompt=txt, api_name="/generate_image")
-        reply = "🖼️ Görsel oluşturuluyor…"
-    else:
-        r = openai_client.responses.create(
-            model="gpt-4.1-mini",
-            input=txt
-        )
-        reply = r.output_text
+    if any(k in txt.lower() for k in ["çiz","görsel","resim","image"]):
+    try:
+        result = hf_client.predict(prompt=txt, api_name="/generate_image")
 
-    st.session_state.chat.append({"role": "assistant", "content": reply})
-    st.rerun()
+        img_io = render_hf_image(result)
+
+        if img_io:
+            st.session_state.chat.append({
+                "role": "assistant",
+                "content": "🖼️ Oluşturulan görsel:"
+            })
+            st.image(img_io, use_container_width=True)
+            reply = " "
+        else:
+            reply = "⚠️ Görsel üretildi ama gösterilemedi"
+
+    except Exception as e:
+        reply = "❌ Görsel üretim hatası"
