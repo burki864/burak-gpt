@@ -6,7 +6,6 @@ from streamlit_cookies_manager import EncryptedCookieManager
 from supabase import create_client
 from datetime import datetime, timezone, timedelta
 from gradio_client import Client
-from zoneinfo import ZoneInfo
 
 # ================= PAGE =================
 st.set_page_config(page_title="BurakGPT", page_icon="🤖", layout="wide")
@@ -23,13 +22,13 @@ hf_client = Client("mrfakename/Z-Image-Turbo", token=st.secrets["HF_TOKEN"])
 
 # ================= COOKIES =================
 cookies = EncryptedCookieManager(
-    prefix="burak_v5_",
+    prefix="burak_v7_",
     password=st.secrets["COOKIE_SECRET"]
 )
 if not cookies.ready():
     st.stop()
 
-# ================= USER CHECK =================
+# ================= USER GUARD =================
 def user_guard(username):
     r = supabase.table("users").select("*").eq("username", username).limit(1).execute()
     if not r.data:
@@ -61,25 +60,28 @@ def user_guard(username):
 
 # ================= LOGIN =================
 if "user" not in st.session_state:
-    st.title("🔐 Giriş")
+    st.title("👤 Giriş")
 
     name = st.text_input("Kullanıcı adı")
-    pwd = st.text_input("Şifre", type="password")
 
     if st.button("Giriş"):
-        r = supabase.table("users").select("*").eq("username", name).execute()
-        if not r.data:
-            supabase.table("users").insert({
-                "username": name,
-                "password": pwd,
-                "created_at": datetime.utcnow().isoformat()
-            }).execute()
-        else:
-            if r.data[0]["password"] != pwd:
-                st.error("❌ Şifre yanlış")
-                st.stop()
+        if not name or len(name) < 3:
+            st.error("❌ Geçerli bir kullanıcı adı gir")
+            st.stop()
 
-        user_guard(name)
+        r = supabase.table("users").select("*").eq("username", name).execute()
+
+        if r.data:
+            st.error("❌ Bu kullanıcı adı zaten kullanımda")
+            st.stop()
+
+        supabase.table("users").insert({
+            "username": name,
+            "created_at": datetime.utcnow().isoformat(),
+            "is_admin": False,
+            "banned": False
+        }).execute()
+
         cookies["user"] = name
         cookies.save()
         st.session_state.user = name
@@ -87,6 +89,7 @@ if "user" not in st.session_state:
 
     st.stop()
 
+# ================= SESSION USER =================
 user = st.session_state.user
 me = user_guard(user)
 
@@ -121,7 +124,13 @@ if "chat" not in st.session_state:
 st.markdown("<h1 style='text-align:center'>BurakGPT</h1>", unsafe_allow_html=True)
 
 for m in st.session_state.chat:
-    st.markdown(f"<div style='padding:10px;margin:6px;border-radius:12px;background:{'#1e88e5' if m['role']=='user' else '#ede7f6'};color:{'white' if m['role']=='user' else '#222'}'>{m['content']}</div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div style='padding:10px;margin:6px;border-radius:12px;"
+        f"background:{'#1e88e5' if m['role']=='user' else '#ede7f6'};"
+        f"color:{'white' if m['role']=='user' else '#222'}'>"
+        f"{m['content']}</div>",
+        unsafe_allow_html=True
+    )
 
 # ================= INPUT =================
 with st.form("f", clear_on_submit=True):
@@ -135,14 +144,17 @@ if send and txt:
         st.warning("⏳ Bu isteği zaten işliyorum")
         st.stop()
 
-    st.session_state.chat.append({"role":"user","content":txt})
+    st.session_state.chat.append({"role": "user", "content": txt})
 
-    if any(k in txt.lower() for k in ["çiz","görsel","resim","image"]):
+    if any(k in txt.lower() for k in ["çiz", "görsel", "resim", "image"]):
         hf_client.predict(prompt=txt, api_name="/generate_image")
         reply = "🖼️ Görsel oluşturuluyor…"
     else:
-        r = openai_client.responses.create(model="gpt-4.1-mini", input=txt)
+        r = openai_client.responses.create(
+            model="gpt-4.1-mini",
+            input=txt
+        )
         reply = r.output_text
 
-    st.session_state.chat.append({"role":"assistant","content":reply})
+    st.session_state.chat.append({"role": "assistant", "content": reply})
     st.rerun()
