@@ -22,25 +22,52 @@ hf_client = Client("mrfakename/Z-Image-Turbo", token=st.secrets["HF_TOKEN"])
 
 # ================= COOKIES =================
 COOKIE_SECRET = st.secrets["COOKIE_SECRET"]
+COOKIE_VERSIONS = ["v1", "v2", "v3", "v4", "v5", "v6"]
 
-COOKIE_VERSIONS = ["v1","v2","v3","v4","v5","v6"]
+cookies = EncryptedCookieManager(
+    prefix="burak_",
+    password=COOKIE_SECRET
+)
 
-cookies = EncryptedCookieManager(prefix="burak_", password=COOKIE_SECRET)
 if not cookies.ready():
     st.stop()
 
-# ================= DEVICE ID (🆕 EKLENDİ) =================
+# ================= LEGACY COOKIE MIGRATION =================
+def find_legacy_user():
+    for v in COOKIE_VERSIONS:
+        legacy = EncryptedCookieManager(
+            prefix=f"burak_{v}_",
+            password=COOKIE_SECRET
+        )
+        if not legacy.ready():
+            continue
+
+        u = legacy.get("user")
+        if u:
+            cookies.set("v6_user", u)
+            cookies.save()
+            return u
+    return None
+
+# ================= COOKIE SCAN =================
+def find_existing_user():
+    u = cookies.get("v6_user")
+    if u:
+        return u
+    return None
+
+# ================= DEVICE ID =================
 def get_device_id():
     did = cookies.get("device_id")
     if not did:
         did = str(uuid.uuid4())
-        cookies["device_id"] = did
+        cookies.set("device_id", did)
         cookies.save()
     return did
 
 DEVICE_ID = get_device_id()
 
-# ================= DEVICE BAN GUARD (🆕 EKLENDİ) =================
+# ================= DEVICE BAN GUARD =================
 def device_guard():
     r = supabase.table("banned_devices") \
         .select("device_id, reason") \
@@ -55,17 +82,6 @@ def device_guard():
 
 device_guard()
 
-# ================= COOKIE MIGRATION =================
-def find_existing_user():
-    for v in COOKIE_VERSIONS:
-        key = f"{v}_user"
-        user = cookies.get(key)
-        if user:
-            cookies["v6_user"] = user
-            cookies.save()
-            return user
-    return None
-
 # ================= IMAGE HELPER =================
 def render_hf_image(result):
     if isinstance(result, dict) and "image" in result:
@@ -76,7 +92,12 @@ def render_hf_image(result):
 
 # ================= USER GUARD =================
 def user_guard(username):
-    r = supabase.table("users").select("*").eq("username", username).limit(1).execute()
+    r = supabase.table("users") \
+        .select("*") \
+        .eq("username", username) \
+        .limit(1) \
+        .execute()
+
     if not r.data:
         return None
 
@@ -102,8 +123,7 @@ def user_guard(username):
 
 # ================= LOGIN =================
 if "user" not in st.session_state:
-
-    existing = find_existing_user()
+    existing = find_existing_user() or find_legacy_user()
     if existing:
         st.session_state.user = existing
         st.rerun()
@@ -118,7 +138,11 @@ if "user" not in st.session_state:
             st.error("❌ En az 3 karakter")
             st.stop()
 
-        r = supabase.table("users").select("username").eq("username", name).execute()
+        r = supabase.table("users") \
+            .select("username") \
+            .eq("username", name) \
+            .execute()
+
         if r.data:
             st.error("❌ Bu kullanıcı adı kullanımda")
             st.stop()
@@ -130,7 +154,7 @@ if "user" not in st.session_state:
             "is_admin": False
         }).execute()
 
-        cookies["v6_user"] = name
+        cookies.set("v6_user", name)
         cookies.save()
 
         st.session_state.user = name
@@ -190,17 +214,17 @@ with st.form("chat_form", clear_on_submit=True):
 if send and txt:
     st.session_state.chat.append({"role": "user", "content": txt})
 
-    if any(k in txt.lower() for k in ["çiz","görsel","resim","image"]):
+    if any(k in txt.lower() for k in ["çiz", "görsel", "resim", "image"]):
         try:
             result = hf_client.predict(prompt=txt, api_name="/generate_image")
-            img_io = render_hf_image(result)
-            if img_io:
-                st.image(img_io, use_container_width=True)
+            img = render_hf_image(result)
+            if img:
+                st.image(img, use_container_width=True)
                 reply = "🖼️ Görsel oluşturuldu"
             else:
                 reply = "⚠️ Görsel var ama gösterilemedi"
-        except:
-            reply = "❌ Görsel hatası"
+        except Exception as e:
+            reply = f"❌ Görsel hatası: {e}"
     else:
         r = openai_client.responses.create(
             model="gpt-4.1-mini",
