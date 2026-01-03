@@ -154,7 +154,6 @@ if "user" not in st.session_state:
         try:
             supabase.table("users").insert({
                 "username": name,
-                "created_at": datetime.utcnow().isoformat(),
                 "banned": False,
                 "is_admin": False
             }).execute()
