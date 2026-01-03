@@ -99,11 +99,11 @@ def user_guard(username):
         st.stop()
 
     # 👇 KULLANICI YOKSA: cookies + session reset
-    if not r.data:
-        cookies.clear()
-        cookies.save()
-        st.session_state.clear()
-        st.rerun()
+ if not r.data:
+    cookies.clear()
+    cookies.save()
+    st.session_state.clear()
+    return None
 
     u = r.data[0]
 
