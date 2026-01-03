@@ -48,7 +48,7 @@ def find_existing_user():
     ]:
         u = cookies.get(key)
         if u:
-            cookies.set("v6_user", u)
+            cookies["v6_user"] = u
             cookies.save()
             return u
     return None
