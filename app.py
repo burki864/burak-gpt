@@ -28,25 +28,13 @@ def get_hf_client():
     )
 
 # ================= COOKIES =================
-COOKIE_SECRET = st.secrets["COOKIE_SECRET"]
-
 cookies = EncryptedCookieManager(
     prefix="burak_",
-    password=COOKIE_SECRET
+    password=st.secrets["COOKIE_SECRET"]
 )
 
 if not cookies.ready():
     st.stop()
-
-# ================= COOKIE SCAN =================
-def find_existing_user():
-    for key in ["v6_user", "v5_user", "v4_user", "v3_user", "v2_user", "v1_user", "user"]:
-        u = cookies.get(key)
-        if u:
-            cookies["v6_user"] = u
-            cookies.save()
-            return u
-    return None
 
 # ================= DEVICE ID =================
 def get_device_id():
@@ -59,17 +47,12 @@ def get_device_id():
 
 DEVICE_ID = get_device_id()
 
-# ================= DEVICE BAN GUARD (SAFE) =================
+# ================= DEVICE BAN =================
 def device_guard():
     try:
-        r = supabase.table("banned_devices") \
-            .select("device_id, reason") \
-            .eq("device_id", DEVICE_ID) \
-            .execute()
+        r = supabase.table("banned_devices").select("*").eq("device_id", DEVICE_ID).execute()
     except Exception:
-        # Supabase düşerse site çökmesin
         return
-
     if r.data:
         st.error("🚫 Bu cihaz engellenmiştir.")
         if r.data[0].get("reason"):
@@ -86,22 +69,14 @@ def render_hf_image(result):
         return BytesIO(result)
     return None
 
-# ================= USER GUARD (SAFE) =================
+# ================= USER GUARD =================
 def user_guard(username):
     try:
-        r = (
-            supabase
-            .table("users")
-            .select("*")
-            .eq("username", username)
-            .limit(1)
-            .execute()
-        )
+        r = supabase.table("users").select("*").eq("username", username).limit(1).execute()
     except Exception:
-        st.error("⚠️ Kullanıcı doğrulanamadı (veritabanı)")
+        st.error("⚠️ Kullanıcı doğrulanamadı")
         st.stop()
 
-    # 👇 KULLANICI YOKSA: cookies + session reset (AMA rerun YOK)
     if not r.data:
         cookies.clear()
         cookies.save()
@@ -110,16 +85,12 @@ def user_guard(username):
 
     u = r.data[0]
 
-    # 👇 HESAP SİLİNMİŞSE
     if u.get("deleted"):
         st.error("🗑️ Bu hesap silinmiştir.")
         st.stop()
 
-    # 👇 BAN KONTROLÜ
     if u.get("banned"):
         until = u.get("ban_until")
-
-        # Ban süresi dolmuşsa otomatik kaldır
         if until and datetime.fromisoformat(until) < datetime.now(timezone.utc):
             supabase.table("users").update({
                 "banned": False,
@@ -127,34 +98,26 @@ def user_guard(username):
                 "ban_reason": None
             }).eq("username", username).execute()
         else:
-            st.error(f"⛔ Banlısın\n\nSebep: {u.get('ban_reason', '-')}")
+            st.error(f"⛔ Banlısın\n\nSebep: {u.get('ban_reason','-')}")
             st.stop()
 
     return u
-# ================= LOGIN =================
-if "user" not in st.session_state:
-    existing = find_existing_user()
-    if existing:
-        st.session_state.user = existing
-        st.rerun()
 
+# ================= LOGIN =================
+def login_screen():
     st.title("👤 Giriş")
     name = st.text_input("Kullanıcı adı", max_chars=20)
 
     if st.button("Giriş"):
         name = name.strip()
-
         if len(name) < 3:
             st.error("❌ En az 3 karakter")
             st.stop()
 
         try:
-            r = supabase.table("users") \
-                .select("username") \
-                .eq("username", name) \
-                .execute()
+            r = supabase.table("users").select("username").eq("username", name).execute()
         except Exception:
-            st.error("⚠️ Veritabanına bağlanılamıyor")
+            st.error("⚠️ Veritabanı hatası")
             st.stop()
 
         if r.data:
@@ -165,7 +128,9 @@ if "user" not in st.session_state:
             supabase.table("users").insert({
                 "username": name,
                 "banned": False,
-                "is_admin": False
+                "deleted": False,
+                "is_admin": False,
+                "created_at": datetime.now(timezone.utc).isoformat()
             }).execute()
         except Exception:
             st.error("⚠️ Kayıt oluşturulamadı")
@@ -173,25 +138,32 @@ if "user" not in st.session_state:
 
         cookies["v6_user"] = name
         cookies.save()
-
         st.session_state.user = name
         st.rerun()
 
+# ================= AUTH FLOW =================
+if "user" not in st.session_state:
+    cookie_user = cookies.get("v6_user")
+    if cookie_user:
+        st.session_state.user = cookie_user
+        st.rerun()
+    login_screen()
     st.stop()
 
-# ================= SESSION USER =================
-user = st.session_state.user
-me = user_guard(user)
+me = user_guard(st.session_state.user)
+if me is None:
+    login_screen()
+    st.stop()
 
-# ================= ADMIN PANEL =================
-if me and me.get("is_admin"):
+# ================= ADMIN =================
+if me.get("is_admin"):
     with st.sidebar.expander("🛠️ Admin Panel"):
         users = supabase.table("users").select("username").execute().data
         target = st.selectbox("Kullanıcı", [u["username"] for u in users])
         reason = st.text_input("Sebep")
         minutes = st.number_input("Ban süresi (dk)", 0, 10080, 0)
 
-        if st.button("⛔ Banla (cihaz kilitli)"):
+        if st.button("⛔ Banla"):
             supabase.table("users").update({
                 "banned": True,
                 "ban_reason": reason,
@@ -205,7 +177,7 @@ if me and me.get("is_admin"):
                 "reason": reason
             }).execute()
 
-            st.success("Kullanıcı + cihaz banlandı")
+            st.success("Banlandı")
 
 # ================= CHAT =================
 if "chat" not in st.session_state:
@@ -222,16 +194,14 @@ for m in st.session_state.chat:
         unsafe_allow_html=True
     )
 
-# ================= INPUT =================
 with st.form("chat_form", clear_on_submit=True):
     txt = st.text_input("Mesajın")
     send = st.form_submit_button("Gönder")
 
-# ================= SEND =================
 if send and txt:
     st.session_state.chat.append({"role": "user", "content": txt})
 
-    if any(k in txt.lower() for k in ["çiz", "görsel", "resim", "image"]):
+    if any(k in txt.lower() for k in ["çiz", "resim", "görsel", "image"]):
         try:
             hf = get_hf_client()
             result = hf.predict(prompt=txt, api_name="/generate_image")
@@ -240,9 +210,9 @@ if send and txt:
                 st.image(img, use_container_width=True)
                 reply = "🖼️ Görsel oluşturuldu"
             else:
-                reply = "⚠️ Görsel var ama gösterilemedi"
+                reply = "⚠️ Görsel gösterilemedi"
         except Exception:
-            reply = "❌ Görsel sistemi şu an kapalı"
+            reply = "❌ Görsel sistemi kapalı"
     else:
         r = openai_client.responses.create(
             model="gpt-4.1-mini",
