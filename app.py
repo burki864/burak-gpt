@@ -93,19 +93,22 @@ def user_guard(username):
             st.stop()
 
     return u
-
 # ================= LOGIN =================
 if "user" not in st.session_state:
 
-    # 🔎 Eski cookie'lerden kullanıcı bul
+    # 🔎 Eski cookie'leri tara
     existing = find_existing_user()
 
     if existing:
-        # ✅ v6 standardına al
-        cookies["v6_user"] = existing
-        cookies.save()
-
+        # ❗ cookie'yi hemen yazmaya zorlama
+        # sadece session'a al
         st.session_state.user = existing
+
+        # 🔁 migrate flag
+        if not cookies.get("v6_user"):
+            cookies["v6_user"] = existing
+            cookies.save()
+
         st.rerun()
 
     # 👤 Login ekranı
@@ -113,15 +116,12 @@ if "user" not in st.session_state:
     name = st.text_input("Kullanıcı adı", max_chars=20)
 
     if st.button("Giriş"):
-
         name = name.strip()
 
-        # ❌ Validasyon
         if not name or len(name) < 3:
             st.error("❌ Kullanıcı adı en az 3 karakter olmalı")
             st.stop()
 
-        # 🔍 DB kontrol
         r = supabase.table("users") \
             .select("username") \
             .eq("username", name) \
@@ -131,7 +131,7 @@ if "user" not in st.session_state:
             st.error("❌ Bu kullanıcı adı zaten kullanımda")
             st.stop()
 
-        # 🧾 DB kayıt
+        # 🧾 yeni kayıt
         supabase.table("users").insert({
             "username": name,
             "created_at": datetime.utcnow().isoformat(),
@@ -139,7 +139,7 @@ if "user" not in st.session_state:
             "is_admin": False
         }).execute()
 
-        # 🍪 Cookie kaydet (SADECE v6)
+        # 🍪 sadece v6 yaz
         cookies["v6_user"] = name
         cookies.save()
 
