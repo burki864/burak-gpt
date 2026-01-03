@@ -22,29 +22,40 @@ hf_client = Client("mrfakename/Z-Image-Turbo", token=st.secrets["HF_TOKEN"])
 
 # ================= COOKIES =================
 COOKIE_SECRET = st.secrets["COOKIE_SECRET"]
-COOKIE_PREFIXES = [
-    "burak_v1_",
-    "burak_v2_",
-    "burak_v3_",
-    "burak_v4_",
-    "burak_v5_",
-    "burak_v6_"
+
+COOKIE_VERSIONS = [
+    "v1",
+    "v2",
+    "v3",
+    "v4",
+    "v5",
+    "v6",
 ]
 
-cookies = EncryptedCookieManager(prefix="burak_v6_", password=COOKIE_SECRET)
+# 🔒 TEK CookieManager (component ÇAKIŞMASI YOK)
+cookies = EncryptedCookieManager(
+    prefix="burak_",
+    password=COOKIE_SECRET
+)
+
 if not cookies.ready():
     st.stop()
 
-def find_existing_user():
-    for p in COOKIE_PREFIXES:
-        c = EncryptedCookieManager(prefix=p, password=COOKIE_SECRET)
-        if not c.ready():
-            continue
-        u = c.get("user")
-        if u:
-            return u
-    return None
 
+def find_existing_user():
+    """
+    v1 → v6 tüm cookie'leri kontrol eder
+    bulursa v6_user olarak migrate eder
+    """
+    for v in COOKIE_VERSIONS:
+        key = f"{v}_user"
+        user = cookies.get(key)
+        if user:
+            # 🔁 v6'ya taşı
+            cookies["v6_user"] = user
+            cookies.save()
+            return user
+    return None
 # ================= IMAGE HELPER =================
 def render_hf_image(result):
     if isinstance(result, dict) and "image" in result:
@@ -85,27 +96,42 @@ def user_guard(username):
 
 # ================= LOGIN =================
 if "user" not in st.session_state:
+
+    # 🔎 Eski cookie'lerden kullanıcı bul
     existing = find_existing_user()
 
     if existing:
-        cookies["user"] = existing
+        # ✅ v6 standardına al
+        cookies["v6_user"] = existing
         cookies.save()
+
         st.session_state.user = existing
         st.rerun()
 
+    # 👤 Login ekranı
     st.title("👤 Giriş")
-    name = st.text_input("Kullanıcı adı")
+    name = st.text_input("Kullanıcı adı", max_chars=20)
 
     if st.button("Giriş"):
+
+        name = name.strip()
+
+        # ❌ Validasyon
         if not name or len(name) < 3:
-            st.error("❌ Geçerli bir kullanıcı adı gir")
+            st.error("❌ Kullanıcı adı en az 3 karakter olmalı")
             st.stop()
 
-        r = supabase.table("users").select("username").eq("username", name).execute()
+        # 🔍 DB kontrol
+        r = supabase.table("users") \
+            .select("username") \
+            .eq("username", name) \
+            .execute()
+
         if r.data:
             st.error("❌ Bu kullanıcı adı zaten kullanımda")
             st.stop()
 
+        # 🧾 DB kayıt
         supabase.table("users").insert({
             "username": name,
             "created_at": datetime.utcnow().isoformat(),
@@ -113,13 +139,14 @@ if "user" not in st.session_state:
             "is_admin": False
         }).execute()
 
-        cookies["user"] = name
+        # 🍪 Cookie kaydet (SADECE v6)
+        cookies["v6_user"] = name
         cookies.save()
+
         st.session_state.user = name
         st.rerun()
 
     st.stop()
-
 # ================= SESSION USER =================
 user = st.session_state.user
 me = user_guard(user)
