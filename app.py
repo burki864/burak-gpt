@@ -23,7 +23,7 @@ hf_client = Client("mrfakename/Z-Image-Turbo", token=st.secrets["HF_TOKEN"])
 
 # ================= COOKIES =================
 cookies = EncryptedCookieManager(
-    prefix="burak_v6_",
+    prefix="burak_v5_",
     password=st.secrets["COOKIE_SECRET"]
 )
 if not cookies.ready():
