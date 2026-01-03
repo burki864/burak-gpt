@@ -1,3 +1,6 @@
-reflex
-fastapi
-uvicorn
+streamlit
+openai>=1.0.0
+supabase
+streamlit-cookies-manager
+gradio-client
+httpx
