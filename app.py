@@ -8,55 +8,26 @@ from datetime import datetime
 from gradio_client import Client
 from zoneinfo import ZoneInfo
 
-# ================= KEEP AWAKE =================
-def keep_awake():
-    while True:
-        try:
-            requests.get("https://burakgpt.streamlit.app/")
-        except:
-            pass
-        time.sleep(600)
-
-threading.Thread(target=keep_awake, daemon=True).start()
-
 # ================= PAGE =================
 st.set_page_config(page_title="BurakGPT", page_icon="🤖", layout="wide")
-
-# ================= STYLE =================
-st.markdown("""
-<style>
-.stApp { background:#f2f3f7; }
-
-.chat-user {
- background:#1e88e5; color:white;
- padding:12px 16px; border-radius:18px;
- margin:8px 0; max-width:70%;
-}
-.chat-ai {
- background:#ede7f6; color:#222;
- padding:12px 16px; border-radius:18px;
- margin:8px 0; max-width:70%;
-}
-input {
- background:black !important;
- color:white !important;
-}
-.image-wrap { position:relative; display:inline-block; }
-.image-wrap a {
- position:absolute; bottom:10px; right:10px;
- background:#000a; color:white;
- padding:6px 10px; border-radius:8px;
- text-decoration:none; display:none;
-}
-.image-wrap:hover a { display:block; }
-</style>
-""", unsafe_allow_html=True)
 
 # ================= SUPABASE =================
 supabase = create_client(
     st.secrets["SUPABASE_URL"],
     st.secrets["SUPABASE_KEY"]
 )
+
+# ================= BAN CHECK =================
+def is_banned(username):
+    r = supabase.table("banned_users") \
+        .select("*") \
+        .eq("username", username) \
+        .execute()
+    return bool(r.data)
+
+def ban_screen():
+    st.error("⛔ Bu hesaba erişim engellendi.")
+    st.stop()
 
 # ================= MODELS =================
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
@@ -88,12 +59,16 @@ def upsert_user(username):
 if "user" not in st.session_state:
     u = cookies.get("user")
     if u:
+        if is_banned(u):
+            ban_screen()
         st.session_state.user = u
         upsert_user(u)
     else:
         st.title("👋 Hoş Geldin")
         name = st.text_input("Adın nedir?")
         if st.button("Devam") and name.strip():
+            if is_banned(name.strip()):
+                ban_screen()
             cookies["user"] = name.strip()
             cookies.save()
             st.session_state.user = name.strip()
@@ -133,8 +108,7 @@ def load_messages(cid):
 
 # ================= SIDEBAR =================
 st.sidebar.title("👤 " + user)
-st.sidebar.markdown("⚠️ Uyarı sistemi kapalı")
-st.sidebar.markdown("⚠️ Ceza sistemi kapalı")
+st.sidebar.success("🟢 Ban sistemi aktif")
 
 if st.sidebar.button("➕ Yeni Sohbet"):
     new_conversation()
@@ -146,37 +120,10 @@ for c in get_conversations():
         st.session_state.chat = load_messages(c["id"])
         st.rerun()
 
-# ================= IMAGE BASE64 =================
-def image_url_to_base64(url):
-    try:
-        r = requests.get(url, timeout=15)
-        if r.status_code == 200:
-            b64 = base64.b64encode(r.content).decode()
-            return f"data:image/png;base64,{b64}"
-    except:
-        pass
-    return None
-
 # ================= TIME FEATURE =================
 def get_time_answer(text):
-    t = text.lower()
-    if "saat" not in t:
+    if "saat" not in text.lower():
         return None
-
-    zones = {
-        "türkiye": ("Türkiye", "Europe/Istanbul"),
-        "abd": ("ABD", "America/New_York"),
-        "amerika": ("ABD", "America/New_York"),
-        "ingiltere": ("İngiltere", "Europe/London"),
-        "almanya": ("Almanya", "Europe/Berlin"),
-        "fransa": ("Fransa", "Europe/Paris"),
-    }
-
-    for k, (name, zone) in zones.items():
-        if k in t:
-            now = datetime.now(ZoneInfo(zone)).strftime("%H:%M")
-            return f"🕒 {name} şu an saat **{now}**"
-
     now = datetime.now(ZoneInfo("Europe/Istanbul")).strftime("%H:%M")
     return f"🕒 Türkiye’de şu an saat **{now}**"
 
@@ -187,19 +134,10 @@ def is_image(t):
 st.markdown("<h1 style='text-align:center'>BurakGPT</h1>", unsafe_allow_html=True)
 
 for m in st.session_state.chat:
-    if m.get("type") == "image":
-        b64 = image_url_to_base64(m["content"])
-        if b64:
-            st.markdown(f"""
-            <div class="image-wrap">
-                <img src="{b64}" width="350">
-                <a href="{b64}" download="burakgpt.png">⬇️ İndir</a>
-            </div>
-            """, unsafe_allow_html=True)
-    elif m["role"] == "user":
-        st.markdown(f"<div class='chat-user'>🧑 {m['content']}</div>", unsafe_allow_html=True)
+    if m["role"] == "user":
+        st.markdown(f"<div style='background:#1e88e5;color:white;padding:12px;border-radius:14px;margin:6px'>🧑 {m['content']}</div>", unsafe_allow_html=True)
     else:
-        st.markdown(f"<div class='chat-ai'>🤖 {m['content']}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='background:#ede7f6;padding:12px;border-radius:14px;margin:6px'>🤖 {m['content']}</div>", unsafe_allow_html=True)
 
 # ================= INPUT =================
 with st.form("chat_form", clear_on_submit=True):
@@ -208,6 +146,9 @@ with st.form("chat_form", clear_on_submit=True):
 
 # ================= SEND =================
 if send and txt.strip():
+
+    if is_banned(user):
+        ban_screen()
 
     if not st.session_state.conversation_id:
         new_conversation(txt[:30])
@@ -226,13 +167,7 @@ if send and txt.strip():
 
     if not reply and is_image(txt):
         img = hf_client.predict(prompt=txt, api_name="/generate_image")
-        url = img[0]["url"] if isinstance(img, list) else img
-        st.session_state.chat.append({
-            "role": "assistant",
-            "content": url,
-            "type": "image"
-        })
-        st.rerun()
+        reply = "🖼️ Görsel oluşturuldu."
 
     if not reply:
         try:
@@ -242,11 +177,7 @@ if send and txt.strip():
             )
             reply = r.output_text
         except:
-            reply = "⚠️ Geçici olarak cevap veremiyorum."
+            reply = "⚠️ Şu an cevap veremiyorum."
 
-    st.session_state.chat.append({
-        "role": "assistant",
-        "content": reply
-    })
-
+    st.session_state.chat.append({"role": "assistant", "content": reply})
     st.rerun()
