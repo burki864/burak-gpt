@@ -8,3 +8,4 @@ python-dotenv
 requests
 postgrest>=0.16.0
 streamlit-autorefresh>=1.0.1
+reflex
