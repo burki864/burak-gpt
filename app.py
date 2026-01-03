@@ -21,13 +21,24 @@ openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 hf_client = Client("mrfakename/Z-Image-Turbo", token=st.secrets["HF_TOKEN"])
 
 # ================= COOKIES =================
-cookies = EncryptedCookieManager(
-    prefix="burak_v4_",
-    password=st.secrets["COOKIE_SECRET"]
-)
-if not cookies.ready():
-    st.stop()
+COOKIE_PREFIXES = [
+    "burak_v1_",
+    "burak_v2_",
+    "burak_v3_",
+    "burak_v4_",
+    "burak_v5_",
+    "burak_v6_"
+]
 
+def find_existing_user():
+    for p in COOKIE_PREFIXES:
+        c = EncryptedCookieManager(prefix=p, password=st.secrets["COOKIE_SECRET"])
+        if not c.ready():
+            continue
+        u = c.get("user")
+        if u:
+            return u
+    return None
 # ================= USER GUARD =================
 def user_guard(username):
     r = supabase.table("users").select("*").eq("username", username).limit(1).execute()
@@ -60,12 +71,17 @@ def user_guard(username):
 # ================= LOGIN =================
 if "user" not in st.session_state:
 
-    # 🍪 COOKIE VARSA → ESKİ KULLANICI → DİREKT DEVAM
-    if cookies.get("user"):
-        st.session_state.user = cookies.get("user")
+    # 🔍 TÜM COOKIE VERSİYONLARINI TARA
+    existing_user = find_existing_user()
+
+    if existing_user:
+        # ✅ ESKİ KULLANICIYI KORU
+        cookies["user"] = existing_user  # v6'ya taşı
+        cookies.save()
+        st.session_state.user = existing_user
         st.rerun()
 
-    # 🍪 YOKSA → YENİ KULLANICI
+    # 🆕 YENİ KULLANICI
     st.title("👤 Giriş")
 
     name = st.text_input("Kullanıcı adı")
@@ -77,7 +93,7 @@ if "user" not in st.session_state:
 
         r = supabase.table("users").select("username").eq("username", name).execute()
 
-        # ❌ AYNI İSİM VARSA YENİ GİRİŞ YOK
+        # ❌ AYNI İSİM VARSA GİRİŞ YOK
         if r.data:
             st.error("❌ Bu kullanıcı adı zaten kullanımda")
             st.stop()
@@ -86,8 +102,8 @@ if "user" not in st.session_state:
         supabase.table("users").insert({
             "username": name,
             "created_at": datetime.utcnow().isoformat(),
-            "is_admin": False,
-            "banned": False
+            "banned": False,
+            "is_admin": False
         }).execute()
 
         cookies["user"] = name
