@@ -22,7 +22,7 @@ hf_client = Client("mrfakename/Z-Image-Turbo", token=st.secrets["HF_TOKEN"])
 
 # ================= COOKIES =================
 cookies = EncryptedCookieManager(
-    prefix="burak_v7_",
+    prefix="burak_v4_",
     password=st.secrets["COOKIE_SECRET"]
 )
 if not cookies.ready():
@@ -57,9 +57,15 @@ def user_guard(username):
             st.stop()
 
     return u
-
 # ================= LOGIN =================
 if "user" not in st.session_state:
+
+    # 🍪 COOKIE VARSA → ESKİ KULLANICI → DİREKT DEVAM
+    if cookies.get("user"):
+        st.session_state.user = cookies.get("user")
+        st.rerun()
+
+    # 🍪 YOKSA → YENİ KULLANICI
     st.title("👤 Giriş")
 
     name = st.text_input("Kullanıcı adı")
@@ -69,12 +75,14 @@ if "user" not in st.session_state:
             st.error("❌ Geçerli bir kullanıcı adı gir")
             st.stop()
 
-        r = supabase.table("users").select("*").eq("username", name).execute()
+        r = supabase.table("users").select("username").eq("username", name).execute()
 
+        # ❌ AYNI İSİM VARSA YENİ GİRİŞ YOK
         if r.data:
             st.error("❌ Bu kullanıcı adı zaten kullanımda")
             st.stop()
 
+        # ✅ YENİ KAYIT
         supabase.table("users").insert({
             "username": name,
             "created_at": datetime.utcnow().isoformat(),
@@ -88,7 +96,6 @@ if "user" not in st.session_state:
         st.rerun()
 
     st.stop()
-
 # ================= SESSION USER =================
 user = st.session_state.user
 me = user_guard(user)
