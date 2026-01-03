@@ -98,8 +98,12 @@ def user_guard(username):
         st.error("⚠️ Kullanıcı doğrulanamadı (veritabanı)")
         st.stop()
 
+    # 👇 KULLANICI YOKSA: cookies + session reset
     if not r.data:
-        return None
+        cookies.clear()
+        cookies.save()
+        st.session_state.clear()
+        st.rerun()
 
     u = r.data[0]
 
@@ -109,6 +113,7 @@ def user_guard(username):
 
     if u.get("banned"):
         until = u.get("ban_until")
+
         if until and datetime.fromisoformat(until) < datetime.now(timezone.utc):
             supabase.table("users").update({
                 "banned": False,
@@ -120,7 +125,6 @@ def user_guard(username):
             st.stop()
 
     return u
-
 # ================= LOGIN =================
 if "user" not in st.session_state:
     existing = find_existing_user()
