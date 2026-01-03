@@ -2,13 +2,27 @@ import uuid, base64
 from io import BytesIO
 import streamlit as st
 from openai import OpenAI
-from streamlit_cookies_manager import EncryptedCookieManager
 from supabase import create_client
 from datetime import datetime, timezone, timedelta
 from gradio_client import Client
 
 # ================= PAGE =================
 st.set_page_config(page_title="BurakGPT", page_icon="🤖", layout="wide")
+
+# ================= SESSION INIT =================
+def init_session():
+    defaults = {
+        "logged_in": False,
+        "username": None,
+        "user": None,
+        "device_id": None,
+        "chat": []
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+init_session()
 
 # ================= SUPABASE =================
 supabase = create_client(
@@ -27,32 +41,24 @@ def get_hf_client():
         token=st.secrets["HF_TOKEN"]
     )
 
-# ================= COOKIES =================
-cookies = EncryptedCookieManager(
-    prefix="burak_",
-    password=st.secrets["COOKIE_SECRET"]
-)
-
-if not cookies.ready():
-    st.stop()
-
 # ================= DEVICE ID =================
 def get_device_id():
-    did = cookies.get("device_id")
-    if not did:
-        did = str(uuid.uuid4())
-        cookies["device_id"] = did
-        cookies.save()
-    return did
+    if not st.session_state.device_id:
+        st.session_state.device_id = str(uuid.uuid4())
+    return st.session_state.device_id
 
 DEVICE_ID = get_device_id()
 
 # ================= DEVICE BAN =================
 def device_guard():
     try:
-        r = supabase.table("banned_devices").select("*").eq("device_id", DEVICE_ID).execute()
+        r = supabase.table("banned_devices") \
+            .select("*") \
+            .eq("device_id", DEVICE_ID) \
+            .execute()
     except Exception:
         return
+
     if r.data:
         st.error("🚫 Bu cihaz engellenmiştir.")
         if r.data[0].get("reason"):
@@ -69,24 +75,32 @@ def render_hf_image(result):
         return BytesIO(result)
     return None
 
+# ================= RESET =================
+def reset_session():
+    st.session_state.clear()
+    st.rerun()
+
 # ================= USER GUARD =================
 def user_guard(username):
     try:
-        r = supabase.table("users").select("*").eq("username", username).limit(1).execute()
+        r = supabase.table("users") \
+            .select("*") \
+            .eq("username", username) \
+            .limit(1) \
+            .execute()
     except Exception:
         st.error("⚠️ Kullanıcı doğrulanamadı")
         st.stop()
 
     if not r.data:
-        cookies.clear()
-        cookies.save()
-        st.session_state.clear()
+        reset_session()
         return None
 
     u = r.data[0]
 
     if u.get("deleted"):
         st.error("🗑️ Bu hesap silinmiştir.")
+        reset_session()
         st.stop()
 
     if u.get("banned"):
@@ -110,47 +124,46 @@ def login_screen():
 
     if st.button("Giriş"):
         name = name.strip()
+
         if len(name) < 3:
             st.error("❌ En az 3 karakter")
             st.stop()
 
         try:
-            r = supabase.table("users").select("username").eq("username", name).execute()
+            r = supabase.table("users") \
+                .select("username") \
+                .eq("username", name) \
+                .execute()
         except Exception:
             st.error("⚠️ Veritabanı hatası")
             st.stop()
 
         if r.data:
-            st.error("❌ Bu kullanıcı adı kullanımda")
-            st.stop()
+            st.session_state.username = name
+            st.session_state.logged_in = True
+            st.rerun()
 
         try:
             supabase.table("users").insert({
                 "username": name,
                 "banned": False,
                 "deleted": False,
-                "is_admin": False,
-                "created_at": datetime.now(timezone.utc).isoformat()
+                "is_admin": False
             }).execute()
-        except Exception:
+        except Exception as e:
             st.error("⚠️ Kayıt oluşturulamadı")
             st.stop()
 
-        cookies["v6_user"] = name
-        cookies.save()
-        st.session_state.user = name
+        st.session_state.username = name
+        st.session_state.logged_in = True
         st.rerun()
 
 # ================= AUTH FLOW =================
-if "user" not in st.session_state:
-    cookie_user = cookies.get("v6_user")
-    if cookie_user:
-        st.session_state.user = cookie_user
-        st.rerun()
+if not st.session_state.logged_in:
     login_screen()
     st.stop()
 
-me = user_guard(st.session_state.user)
+me = user_guard(st.session_state.username)
 if me is None:
     login_screen()
     st.stop()
@@ -180,9 +193,6 @@ if me.get("is_admin"):
             st.success("Banlandı")
 
 # ================= CHAT =================
-if "chat" not in st.session_state:
-    st.session_state.chat = []
-
 st.markdown("<h1 style='text-align:center'>BurakGPT</h1>", unsafe_allow_html=True)
 
 for m in st.session_state.chat:
