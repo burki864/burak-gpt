@@ -19,7 +19,7 @@ supabase = create_client(
 # ================= OPENAI =================
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# ================= HF CLIENT (LAZY + SAFE) =================
+# ================= HF CLIENT =================
 @st.cache_resource(show_spinner=False)
 def get_hf_client():
     return Client(
@@ -38,7 +38,7 @@ cookies = EncryptedCookieManager(
 if not cookies.ready():
     st.stop()
 
-# ================= COOKIE SCAN (v1 → v6) =================
+# ================= COOKIE SCAN =================
 def find_existing_user():
     for key in ["v6_user", "v5_user", "v4_user", "v3_user", "v2_user", "v1_user", "user"]:
         u = cookies.get(key)
@@ -59,12 +59,16 @@ def get_device_id():
 
 DEVICE_ID = get_device_id()
 
-# ================= DEVICE BAN GUARD =================
+# ================= DEVICE BAN GUARD (SAFE) =================
 def device_guard():
-    r = supabase.table("banned_devices") \
-        .select("device_id, reason") \
-        .eq("device_id", DEVICE_ID) \
-        .execute()
+    try:
+        r = supabase.table("banned_devices") \
+            .select("device_id, reason") \
+            .eq("device_id", DEVICE_ID) \
+            .execute()
+    except Exception:
+        # Supabase düşerse site çökmesin
+        return
 
     if r.data:
         st.error("🚫 Bu cihaz engellenmiştir.")
@@ -82,13 +86,17 @@ def render_hf_image(result):
         return BytesIO(result)
     return None
 
-# ================= USER GUARD =================
+# ================= USER GUARD (SAFE) =================
 def user_guard(username):
-    r = supabase.table("users") \
-        .select("*") \
-        .eq("username", username) \
-        .limit(1) \
-        .execute()
+    try:
+        r = supabase.table("users") \
+            .select("*") \
+            .eq("username", username) \
+            .limit(1) \
+            .execute()
+    except Exception:
+        st.error("⚠️ Kullanıcı doğrulanamadı (veritabanı)")
+        st.stop()
 
     if not r.data:
         return None
@@ -130,21 +138,29 @@ if "user" not in st.session_state:
             st.error("❌ En az 3 karakter")
             st.stop()
 
-        r = supabase.table("users") \
-            .select("username") \
-            .eq("username", name) \
-            .execute()
+        try:
+            r = supabase.table("users") \
+                .select("username") \
+                .eq("username", name) \
+                .execute()
+        except Exception:
+            st.error("⚠️ Veritabanına bağlanılamıyor")
+            st.stop()
 
         if r.data:
             st.error("❌ Bu kullanıcı adı kullanımda")
             st.stop()
 
-        supabase.table("users").insert({
-            "username": name,
-            "created_at": datetime.utcnow().isoformat(),
-            "banned": False,
-            "is_admin": False
-        }).execute()
+        try:
+            supabase.table("users").insert({
+                "username": name,
+                "created_at": datetime.utcnow().isoformat(),
+                "banned": False,
+                "is_admin": False
+            }).execute()
+        except Exception:
+            st.error("⚠️ Kayıt oluşturulamadı")
+            st.stop()
 
         cookies["v6_user"] = name
         cookies.save()
@@ -210,17 +226,14 @@ if send and txt:
         try:
             hf = get_hf_client()
             result = hf.predict(prompt=txt, api_name="/generate_image")
-
             img = render_hf_image(result)
             if img:
                 st.image(img, use_container_width=True)
                 reply = "🖼️ Görsel oluşturuldu"
             else:
                 reply = "⚠️ Görsel var ama gösterilemedi"
-
         except Exception:
             reply = "❌ Görsel sistemi şu an kapalı"
-
     else:
         r = openai_client.responses.create(
             model="gpt-4.1-mini",
