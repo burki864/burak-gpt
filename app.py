@@ -16,14 +16,17 @@ supabase = create_client(
     st.secrets["SUPABASE_KEY"]
 )
 
-# ================= MODELS =================
+# ================= OPENAI =================
 openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
+# ================= HF CLIENT (LAZY + SAFE) =================
 @st.cache_resource(show_spinner=False)
 def get_hf_client():
     return Client(
         "mrfakename/Z-Image-Turbo",
         token=st.secrets["HF_TOKEN"]
     )
+
 # ================= COOKIES =================
 COOKIE_SECRET = st.secrets["COOKIE_SECRET"]
 
@@ -35,21 +38,9 @@ cookies = EncryptedCookieManager(
 if not cookies.ready():
     st.stop()
 
-# ================= COOKIE + LEGACY SCAN =================
+# ================= COOKIE SCAN (v1 → v6) =================
 def find_existing_user():
-    """
-    v1 → v6 dahil eski tüm kullanıcıları
-    TEK CookieManager üstünden tarar
-    """
-    for key in [
-        "v6_user",
-        "v5_user",
-        "v4_user",
-        "v3_user",
-        "v2_user",
-        "v1_user",
-        "user"
-    ]:
+    for key in ["v6_user", "v5_user", "v4_user", "v3_user", "v2_user", "v1_user", "user"]:
         u = cookies.get(key)
         if u:
             cookies["v6_user"] = u
@@ -62,7 +53,7 @@ def get_device_id():
     did = cookies.get("device_id")
     if not did:
         did = str(uuid.uuid4())
-        cookies.set("device_id", did)
+        cookies["device_id"] = did
         cookies.save()
     return did
 
@@ -124,7 +115,6 @@ def user_guard(username):
 
 # ================= LOGIN =================
 if "user" not in st.session_state:
-
     existing = find_existing_user()
     if existing:
         st.session_state.user = existing
@@ -156,7 +146,7 @@ if "user" not in st.session_state:
             "is_admin": False
         }).execute()
 
-        cookies.set("v6_user", name)
+        cookies["v6_user"] = name
         cookies.save()
 
         st.session_state.user = name
@@ -218,15 +208,19 @@ if send and txt:
 
     if any(k in txt.lower() for k in ["çiz", "görsel", "resim", "image"]):
         try:
-            result = hf_client.predict(prompt=txt, api_name="/generate_image")
+            hf = get_hf_client()
+            result = hf.predict(prompt=txt, api_name="/generate_image")
+
             img = render_hf_image(result)
             if img:
                 st.image(img, use_container_width=True)
                 reply = "🖼️ Görsel oluşturuldu"
             else:
                 reply = "⚠️ Görsel var ama gösterilemedi"
-        except Exception as e:
-            reply = f"❌ Görsel hatası: {e}"
+
+        except Exception:
+            reply = "❌ Görsel sistemi şu an kapalı"
+
     else:
         r = openai_client.responses.create(
             model="gpt-4.1-mini",
