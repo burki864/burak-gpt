@@ -89,31 +89,37 @@ def render_hf_image(result):
 # ================= USER GUARD (SAFE) =================
 def user_guard(username):
     try:
-        r = supabase.table("users") \
-            .select("*") \
-            .eq("username", username) \
-            .limit(1) \
+        r = (
+            supabase
+            .table("users")
+            .select("*")
+            .eq("username", username)
+            .limit(1)
             .execute()
+        )
     except Exception:
         st.error("⚠️ Kullanıcı doğrulanamadı (veritabanı)")
         st.stop()
 
-    # 👇 KULLANICI YOKSA: cookies + session reset
- if not r.data:
-    cookies.clear()
-    cookies.save()
-    st.session_state.clear()
-    return None
+    # 👇 KULLANICI YOKSA: cookies + session reset (AMA rerun YOK)
+    if not r.data:
+        cookies.clear()
+        cookies.save()
+        st.session_state.clear()
+        return None
 
     u = r.data[0]
 
+    # 👇 HESAP SİLİNMİŞSE
     if u.get("deleted"):
         st.error("🗑️ Bu hesap silinmiştir.")
         st.stop()
 
+    # 👇 BAN KONTROLÜ
     if u.get("banned"):
         until = u.get("ban_until")
 
+        # Ban süresi dolmuşsa otomatik kaldır
         if until and datetime.fromisoformat(until) < datetime.now(timezone.utc):
             supabase.table("users").update({
                 "banned": False,
@@ -121,7 +127,7 @@ def user_guard(username):
                 "ban_reason": None
             }).eq("username", username).execute()
         else:
-            st.error(f"⛔ Banlısın\n\nSebep: {u.get('ban_reason','-')}")
+            st.error(f"⛔ Banlısın\n\nSebep: {u.get('ban_reason', '-')}")
             st.stop()
 
     return u
