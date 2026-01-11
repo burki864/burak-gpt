@@ -110,24 +110,17 @@ def login_screen():
             st.error("❌ En az 3 karakter")
             st.stop()
 
-        r = supabase.table("users").select("*").eq("username", name).execute()
-
-        # Eğer kullanıcı varsa → direkt giriş
-        if r.data:
-            st.session_state.username = name
-            st.session_state.logged_in = True
-            st.rerun()
-
-        # Eğer yoksa → oluştur
         try:
-            supabase.table("users").insert({
+            # UPSERT = varsa dokunma, yoksa oluştur
+            supabase.table("users").upsert({
                 "username": name,
                 "banned": False,
                 "deleted": False,
                 "is_admin": False
-            }).execute()
-        except:
-            st.error("⚠️ Kayıt oluşturulamadı")
+            }, on_conflict="username").execute()
+        except Exception as e:
+            st.error("⚠️ Supabase yazma hatası")
+            st.code(str(e))
             st.stop()
 
         st.session_state.username = name
