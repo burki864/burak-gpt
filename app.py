@@ -36,10 +36,7 @@ openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 # ================= HF CLIENT =================
 @st.cache_resource(show_spinner=False)
 def get_hf_client():
-    return Client(
-        "mrfakename/Z-Image-Turbo",
-        token=st.secrets["HF_TOKEN"]
-    )
+    return Client("mrfakename/Z-Image-Turbo", token=st.secrets["HF_TOKEN"])
 
 # ================= DEVICE ID =================
 def get_device_id():
@@ -51,14 +48,7 @@ DEVICE_ID = get_device_id()
 
 # ================= DEVICE BAN =================
 def device_guard():
-    try:
-        r = supabase.table("banned_devices") \
-            .select("*") \
-            .eq("device_id", DEVICE_ID) \
-            .execute()
-    except Exception:
-        return
-
+    r = supabase.table("banned_devices").select("*").eq("device_id", DEVICE_ID).execute()
     if r.data:
         st.error("🚫 Bu cihaz engellenmiştir.")
         if r.data[0].get("reason"):
@@ -82,16 +72,7 @@ def reset_session():
 
 # ================= USER GUARD =================
 def user_guard(username):
-    try:
-        r = supabase.table("users") \
-            .select("*") \
-            .eq("username", username) \
-            .limit(1) \
-            .execute()
-    except Exception:
-        st.error("⚠️ Kullanıcı doğrulanamadı")
-        st.stop()
-
+    r = supabase.table("users").select("*").eq("username", username).limit(1).execute()
     if not r.data:
         reset_session()
         return None
@@ -123,37 +104,35 @@ def login_screen():
     name = st.text_input("Kullanıcı adı", max_chars=20)
 
     if st.button("Giriş"):
-        name = name.strip()
+        name = name.strip().lower()
 
         if len(name) < 3:
             st.error("❌ En az 3 karakter")
             st.stop()
 
+        r = supabase.table("users").select("*").eq("username", name).execute()
+
+        # Eğer kullanıcı varsa → direkt giriş
+        if r.data:
+            st.session_state.username = name
+            st.session_state.logged_in = True
+            st.rerun()
+
+        # Eğer yoksa → oluştur
         try:
-            r = supabase.table("users").select("*").eq("username", name).execute()
+            supabase.table("users").insert({
+                "username": name,
+                "banned": False,
+                "deleted": False,
+                "is_admin": False
+            }).execute()
+        except:
+            st.error("⚠️ Kayıt oluşturulamadı")
+            st.stop()
 
-# Eğer kullanıcı zaten varsa → direkt giriş
-if r.data:
-    st.session_state.username = name
-    st.session_state.logged_in = True
-    st.rerun()
-
-# Eğer yoksa → oluştur
-try:
-    supabase.table("users").insert({
-        "username": name,
-        "banned": False,
-        "deleted": False,
-        "is_admin": False
-    }).execute()
-except Exception as e:
-    st.error("⚠️ Kayıt oluşturulamadı")
-    st.stop()
-
-# Kayıt başarılıysa → giriş
-st.session_state.username = name
-st.session_state.logged_in = True
-st.rerun()
+        st.session_state.username = name
+        st.session_state.logged_in = True
+        st.rerun()
 
 # ================= AUTH FLOW =================
 if not st.session_state.logged_in:
@@ -218,13 +197,10 @@ if send and txt:
                 reply = "🖼️ Görsel oluşturuldu"
             else:
                 reply = "⚠️ Görsel gösterilemedi"
-        except Exception:
+        except:
             reply = "❌ Görsel sistemi kapalı"
     else:
-        r = openai_client.responses.create(
-            model="gpt-4.1-mini",
-            input=txt
-        )
+        r = openai_client.responses.create(model="gpt-4.1-mini", input=txt)
         reply = r.output_text
 
     st.session_state.chat.append({"role": "assistant", "content": reply})
