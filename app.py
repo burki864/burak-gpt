@@ -130,33 +130,30 @@ def login_screen():
             st.stop()
 
         try:
-            r = supabase.table("users") \
-                .select("username") \
-                .eq("username", name) \
-                .execute()
-        except Exception:
-            st.error("⚠️ Veritabanı hatası")
-            st.stop()
+            r = supabase.table("users").select("*").eq("username", name).execute()
 
-        if r.data:
-            st.session_state.username = name
-            st.session_state.logged_in = True
-            st.rerun()
+# Eğer kullanıcı zaten varsa → direkt giriş
+if r.data:
+    st.session_state.username = name
+    st.session_state.logged_in = True
+    st.rerun()
 
-        try:
-            supabase.table("users").insert({
-                "username": name,
-                "banned": False,
-                "deleted": False,
-                "is_admin": False
-            }).execute()
-        except Exception as e:
-            st.error("⚠️ Kayıt oluşturulamadı")
-            st.stop()
+# Eğer yoksa → oluştur
+try:
+    supabase.table("users").insert({
+        "username": name,
+        "banned": False,
+        "deleted": False,
+        "is_admin": False
+    }).execute()
+except Exception as e:
+    st.error("⚠️ Kayıt oluşturulamadı")
+    st.stop()
 
-        st.session_state.username = name
-        st.session_state.logged_in = True
-        st.rerun()
+# Kayıt başarılıysa → giriş
+st.session_state.username = name
+st.session_state.logged_in = True
+st.rerun()
 
 # ================= AUTH FLOW =================
 if not st.session_state.logged_in:
