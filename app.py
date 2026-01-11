@@ -111,12 +111,10 @@ def login_screen():
             st.stop()
 
         try:
-            # UPSERT = varsa dokunma, yoksa oluştur
             supabase.table("users").upsert({
                 "username": name,
                 "banned": False,
-                "deleted": False,
-                "is_admin": False
+                "deleted": False
             }, on_conflict="username").execute()
         except Exception as e:
             st.error("⚠️ Supabase yazma hatası")
